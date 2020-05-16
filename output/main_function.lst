@@ -1,0 +1,1065 @@
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN_FUNCTION
+OBJECT MODULE PLACED IN .\output\main_function.obj
+COMPILER INVOKED BY: D:\Softwares\Keil_v5\C51\BIN\C51.EXE src\main_function.c OPTIMIZE(8,SPEED) BROWSE INCDIR(.\inc) DEB
+                    -UG OBJECTEXTEND PRINT(.\output\main_function.lst) TABS(2) OBJECT(.\output\main_function.obj)
+
+line level    source
+
+   1          #include "main.h"
+   2          #include "LCD12864.h"
+   3          #include "picture.h"
+   4          #include "ZW_SZM201.h"
+   5          #include "DS18B20.h"
+   6          
+   7          
+   8          #include "intrins.h"
+   9          #include "string.h"
+  10          #include "reg52.h"
+  11          #include "stdio.h"
+  12          
+  13          
+  14          /****************************************************
+  15          初始化函数
+  16          
+  17          ****************************************************/
+  18          
+  19          
+  20          void timer0_interrupt (void) interrupt 1
+  21          {
+  22   1          TH0 = 0x4C; //50ms
+  23   1          TL0 = 0x00;
+  24   1      /********************************************************************************************************
+  25   1      蜂鸣器定时 占空比及鸣响次数
+  26   1      ********************************************************************************************************/
+  27   1        
+  28   1        if(buzzer_quantity) 
+  29   1        { 
+  30   2          time0_buzzer++;
+  31   2        
+  32   2          if(time0_buzzer<buzzer_low_time&&time0_buzzer>=0)
+  33   2            buzzer=0;
+  34   2          if(time0_buzzer<=(buzzer_high_time+buzzer_low_time)&&time0_buzzer>=buzzer_low_time)
+  35   2          {
+  36   3            buzzer=1;
+  37   3            if(time0_buzzer==(buzzer_high_time+buzzer_low_time))
+  38   3            {
+  39   4              time0_buzzer=0;
+  40   4              buzzer_quantity--;
+  41   4      
+  42   4            }
+  43   3          }
+  44   2        } 
+  45   1      /********************************************************************************************************
+  46   1      幻灯片定时
+  47   1      ********************************************************************************************************/
+  48   1        if(open_lock==0)
+  49   1          time0_init_screen++;
+  50   1      /********************************************************************************************************
+  51   1      开关门动画定时
+  52   1      ********************************************************************************************************/
+  53   1        if(open_lock==1)
+  54   1          time0_cartoon++;
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 2   
+
+  55   1      /********************************************************************************************************
+  56   1      上锁定时
+  57   1      ********************************************************************************************************/
+  58   1        if(open_lock==1)
+  59   1          time0_lock++;
+  60   1        if(time0_lock>=100&&open_lock==1)
+  61   1        {
+  62   2      //    while(buzzer_quantity);      //等待鸣响完成         //错误
+  63   2      
+  64   2          open_lock=0;           //上锁
+  65   2      
+  66   2          time0_lock=0;          //定时重置
+  67   2          time0_init_screen=0;
+  68   2          time0_buzzer=0;
+  69   2      
+  70   2          count_options=0;
+  71   2          count_confirm=0;         //屏幕及选项重置
+  72   2          copy_count_options=0;
+  73   2          time0_cartoon=0;
+  74   2      
+  75   2          receive_data[0]=0x00;
+  76   2          receive_data[1]=0x00;      
+  77   2          receive_data[2]=0x00;
+  78   2          receive_data[3]=0x00;
+  79   2          receive_data[4]=0x00;
+  80   2          receive_data[5]=0x00;
+  81   2          receive_data[6]=0x00;
+  82   2          receive_data[7]=0x00;       //数据协议重置
+  83   2      
+  84   2          parameter_1=0;
+  85   2          parameter_2=0;
+  86   2          parameter_3=0;
+  87   2      
+  88   2          buzzer_quantity=3;
+  89   2          buzzer_low_time=2;
+  90   2          buzzer_high_time=2;
+  91   2      
+  92   2          flag_compare=1;
+  93   2          
+  94   2      //    display_init_screen_00();
+  95   2            
+  96   2        }
+  97   1      
+  98   1      
+  99   1      }
+ 100          
+ 101          
+ 102          
+ 103          void examine_lock (void)
+ 104          {
+ 105   1        if(open_lock==0)
+ 106   1        {
+ 107   2      
+ 108   2          if(flag_compare==1)
+ 109   2          {
+ 110   3            delay_10us(5000);               //指纹模块命令数据间 延时
+ 111   3            ZW_SZW201_cmd(0,0,0,"compare");
+ 112   3            flag_compare=0;
+ 113   3          }
+ 114   2      
+ 115   2          if(receive_data[0]==0xf5&&receive_data[1]==0x0c&&receive_data[7]==0xf5)
+ 116   2          {
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 3   
+
+ 117   3            if(receive_data[4]==0x01||receive_data[4]==0x02||receive_data[4]==0x03)
+ 118   3            {
+ 119   4              while(buzzer_quantity);     //等待鸣响完成
+ 120   4              open_lock=1;
+ 121   4              flag_quick_door=1;
+ 122   4              flag_display_screen=1;      //显示一次防止闪烁
+ 123   4              flag_buzzer=1;          //蜂鸣器标志
+ 124   4      
+ 125   4      //        receive_data[0]=0x00;
+ 126   4      //        receive_data[1]=0x00;      
+ 127   4      //        receive_data[2]=0x00;
+ 128   4      //        receive_data[3]=0x00;
+ 129   4      //        receive_data[4]=0x00;
+ 130   4      //        receive_data[5]=0x00;
+ 131   4      //        receive_data[6]=0x00;
+ 132   4      //        receive_data[7]=0x00;       //数据协议重置
+ 133   4                     
+ 134   4      
+ 135   4              buzzer_quantity=3;
+ 136   4              buzzer_low_time=2;
+ 137   4              buzzer_high_time=2;
+ 138   4            }
+ 139   3            if(receive_data[4]==0x05)
+ 140   3            {
+ 141   4              while(buzzer_quantity);
+ 142   4              flag_compare=1;
+ 143   4              //添加代码
+ 144   4              receive_data[0]=0x00;
+ 145   4              receive_data[1]=0x00;      
+ 146   4              receive_data[2]=0x00;
+ 147   4              receive_data[3]=0x00;
+ 148   4              receive_data[4]=0x00;
+ 149   4              receive_data[5]=0x00;
+ 150   4              receive_data[6]=0x00;
+ 151   4              receive_data[7]=0x00;       //数据协议重置
+ 152   4      
+ 153   4              buzzer_quantity=1;
+ 154   4              buzzer_low_time=3;
+ 155   4              buzzer_high_time=0;
+ 156   4      
+ 157   4            }
+ 158   3          }
+ 159   2        }
+ 160   1        
+ 161   1      
+ 162   1      }
+ 163          
+ 164          //void buzzer_time_quantity (uint low_time,uint high_time,uchar quantity)
+ 165          //{
+ 166          //  if(quantity)  
+ 167          //  {
+ 168          //    if(time0_buzzer<low_time&&time0_buzzer>=0)
+ 169          //      buzzer=0;
+ 170          //    if(time0_buzzer<high_time&&time0_buzzer>=low_time)
+ 171          //    {
+ 172          //      buzzer=1;
+ 173          //      if(time0_buzzer==high_time)
+ 174          //        time0_buzzer=0;
+ 175          //      quantity--;
+ 176          //    }
+ 177          //  } 
+ 178          //}
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 4   
+
+ 179          
+ 180          void examine_key (void)
+ 181          {
+ 182   1        if(options==0)
+ 183   1        {
+ 184   2          delay_10us(1000);
+ 185   2          if(options==0)
+ 186   2          {
+ 187   3            buzzer=0;
+ 188   3            time0_lock=0;
+ 189   3            count_options++;
+ 190   3            flag_display_screen=1;
+ 191   3            if(count_confirm==4&&(copy_count_options==20||copy_count_options==21||copy_count_options==22||copy_coun
+             -t_options==24||copy_count_options==25||copy_count_options==29))
+ 192   3            {
+ 193   4              parameter=0;
+ 194   4      
+ 195   4              if(copy_count_options==20)
+ 196   4              {
+ 197   5                count_confirm=3;
+ 198   5                copy_count_options=16;
+ 199   5                count_options=21;
+ 200   5              }
+ 201   4              if(copy_count_options==21)
+ 202   4              {
+ 203   5                count_confirm=3;
+ 204   5                copy_count_options=16;
+ 205   5                count_options=22;
+ 206   5              }
+ 207   4              if(copy_count_options==22)
+ 208   4              {
+ 209   5                count_confirm=3;
+ 210   5                copy_count_options=16;
+ 211   5                count_options=23;
+ 212   5              }
+ 213   4      
+ 214   4      
+ 215   4      
+ 216   4              if(copy_count_options==24)
+ 217   4              {
+ 218   5                count_confirm=3;
+ 219   5                copy_count_options=17;
+ 220   5                count_options=25;
+ 221   5              }
+ 222   4              if(copy_count_options==25)
+ 223   4              {
+ 224   5                count_confirm=3;
+ 225   5                copy_count_options=17;
+ 226   5                count_options=26;
+ 227   5              }
+ 228   4      
+ 229   4      
+ 230   4      
+ 231   4              if(copy_count_options==29)
+ 232   4              {
+ 233   5                count_confirm=3;
+ 234   5                copy_count_options=19;
+ 235   5                count_options=30;
+ 236   5              }
+ 237   4            }
+ 238   3      
+ 239   3      
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 5   
+
+ 240   3      
+ 241   3            if(count_options==4&&count_confirm==0)   //界面00箭头循环       门选项
+ 242   3              count_options=0;
+ 243   3            if(count_options==10&&count_confirm==1)  //界面01箭头循环       一般门操作
+ 244   3              count_options=4;
+ 245   3            if(count_options==16&&count_confirm==2)  //界面02_02箭头循环      快门设置
+ 246   3              count_options=10;
+ 247   3            if(count_options==20&&count_confirm==2)  //界面02_01箭头循环      指纹命令选项
+ 248   3              count_options=16;
+ 249   3      
+ 250   3      
+ 251   3            if(count_options==24&&count_confirm==3)  //界面03_00箭头循环      录入指纹
+ 252   3              count_options=20;
+ 253   3            if(count_options==27&&count_confirm==3)  //界面03_01箭头循环      删除指纹
+ 254   3              count_options=24;
+ 255   3            if(count_options==29&&count_confirm==3)  //界面03_01箭头循环      删除所有
+ 256   3              count_options=27;
+ 257   3            if(count_options==31&&count_confirm==3)  //界面03_01箭头循环      比对等级
+ 258   3              count_options=29;
+ 259   3      
+ 260   3            if(count_confirm==2&&(copy_count_options==4||copy_count_options==5||copy_count_options==6))
+ 261   3            {
+ 262   4              count_options=0;
+ 263   4              count_confirm=0;         //屏幕及选项重置
+ 264   4              copy_count_options=0;
+ 265   4              time0_lock=0;
+ 266   4      
+ 267   4                buzzer_quantity=0;
+ 268   4              buzzer_low_time=0;
+ 269   4              buzzer_high_time=0;          //暂停声音
+ 270   4      
+ 271   4            }
+ 272   3          }
+ 273   2          while(!options);
+ 274   2          buzzer=1;
+ 275   2        }
+ 276   1        if(confirm==0)
+ 277   1        {
+ 278   2          delay_10us(1000);
+ 279   2          if(confirm==0)
+ 280   2          {
+ 281   3            buzzer=0;
+ 282   3            time0_lock=0;
+ 283   3            flag_display_screen=1;
+ 284   3            if(copy_count_options==20||copy_count_options==21||copy_count_options==22||copy_count_options==24||copy
+             -_count_options==25||copy_count_options==29)
+ 285   3            {
+ 286   4              parameter++;
+ 287   4      
+ 288   4              if(copy_count_options==22&&parameter==0x04)
+ 289   4                parameter=0;
+ 290   4              if(copy_count_options==29&&parameter==0x0a)
+ 291   4                parameter=0;
+ 292   4      
+ 293   4            }
+ 294   3            else
+ 295   3            {
+ 296   4            
+ 297   4              count_confirm++;
+ 298   4      
+ 299   4              copy_count_options=count_options;
+ 300   4      
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 6   
+
+ 301   4              if(count_confirm==1)
+ 302   4                count_options=4;
+ 303   4              if(count_confirm==2&&copy_count_options==9)   //进入快门设置界面 count_options++
+ 304   4                count_options=10;
+ 305   4              if(count_confirm==2&&copy_count_options==8)   //进入指纹设置界面 count_options++
+ 306   4                count_options=16;
+ 307   4              
+ 308   4              if(count_confirm==3&&copy_count_options==16)  //进入添加指纹界面 count_options++
+ 309   4                count_options=20;
+ 310   4              if(count_confirm==3&&copy_count_options==17)  //进入删除指纹界面 count_options++
+ 311   4                count_options=24;
+ 312   4              if(count_confirm==3&&copy_count_options==18)  //进入删除所有指纹界面 count_options++
+ 313   4                count_options=27;
+ 314   4              if(count_confirm==3&&copy_count_options==19)  //进入比对等级设置界面 count_options++
+ 315   4                count_options=29;
+ 316   4      
+ 317   4              if(copy_count_options==20||copy_count_options==21||copy_count_options==22||copy_count_options==24||cop
+             -y_count_options==25||copy_count_options==29)
+ 318   4                parameter=1;
+ 319   4              
+ 320   4                  
+ 321   4              flag_control_door=1;
+ 322   4            }
+ 323   3          }
+ 324   2          while(!confirm);
+ 325   2          buzzer=1;
+ 326   2        }
+ 327   1      
+ 328   1        if(back_stop==0)
+ 329   1        {
+ 330   2          delay_10us(1000);
+ 331   2          if(back_stop==0)
+ 332   2          {
+ 333   3            buzzer=0;
+ 334   3            time0_lock=0;
+ 335   3            flag_display_screen=1;
+ 336   3      
+ 337   3            count_options=0;
+ 338   3            copy_count_options=0;
+ 339   3            count_confirm=0;         //屏幕及选项重置
+ 340   3      
+ 341   3            relay_A_stop=0;
+ 342   3            relay_B_stop=0;
+ 343   3            relay_C_stop=0;
+ 344   3            relay_D_stop=0;
+ 345   3      
+ 346   3            delay_10us(2000);
+ 347   3      
+ 348   3            relay_A_stop=1;
+ 349   3            relay_B_stop=1;
+ 350   3            relay_C_stop=1;
+ 351   3            relay_D_stop=1;
+ 352   3      
+ 353   3              buzzer_quantity=0;
+ 354   3            buzzer_low_time=0;
+ 355   3            buzzer_high_time=0;          //暂停声音
+ 356   3      
+ 357   3      
+ 358   3      //      control_door('A',"stop");
+ 359   3      //      control_door('B',"stop");
+ 360   3      //      control_door('C',"stop");
+ 361   3      //      control_door('D',"stop");
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 7   
+
+ 362   3            parameter_1=0;
+ 363   3            parameter_2=0;
+ 364   3            parameter_3=0;
+ 365   3          }
+ 366   2          while(!back_stop);
+ 367   2          buzzer=1;
+ 368   2        }
+ 369   1      
+ 370   1      }
+ 371          
+ 372          
+ 373          
+ 374          void display_init_screen_00 (void)
+ 375          {
+ 376   1        LCD12864_init_character();
+ 377   1        LCD12864_display_character(0,0,"门指");
+ 378   1        LCD12864_display_character(1,0,"禁纹");
+ 379   1        LCD12864_display_character(2,0,"系技");
+ 380   1        LCD12864_display_character(3,0,"统术");
+ 381   1      
+ 382   1        LCD12864_init_picture();
+ 383   1        LCD12864_display_picture(0,2,picture_init_screen00);  
+ 384   1      }
+ 385          
+ 386          void display_init_screen_01 (void)
+ 387          {
+ 388   1        LCD12864_init_character();
+ 389   1        LCD12864_display_character(0,0,"户主：高国新");
+ 390   1        LCD12864_display_character(1,0,"联系方式：");
+ 391   1        LCD12864_display_character(2,0,"13966085530");
+ 392   1        LCD12864_display_character(3,0,"室内温度");             
+ 393   1        LCD12864_display_character(3,4,temperature_string);
+ 394   1        LCD12864_display_character(3,7,"℃");   
+ 395   1      }
+ 396          
+ 397          
+ 398          
+ 399          
+ 400          
+ 401          
+ 402          
+ 403          
+ 404          
+ 405          
+ 406          
+ 407          
+ 408          void display_control_screen_00 (uchar i)
+ 409          {
+ 410   1        LCD12864_init_character();
+ 411   1        LCD12864_display_character(0,2,"卷闸门_A");
+ 412   1        LCD12864_display_character(1,2,"卷闸门_B");
+ 413   1        LCD12864_display_character(2,2,"卷闸门_C");
+ 414   1        LCD12864_display_character(3,2,"卷闸门_D");
+ 415   1        if(i=='A')
+ 416   1          LCD12864_display_character(0,0," ->");
+ 417   1        if(i=='B')
+ 418   1          LCD12864_display_character(1,0," ->");
+ 419   1        if(i=='C')
+ 420   1          LCD12864_display_character(2,0," ->");
+ 421   1        if(i=='D')
+ 422   1          LCD12864_display_character(3,0," ->");    
+ 423   1      }
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 8   
+
+ 424          
+ 425          void display_control_screen_01 (uchar *cmd)
+ 426          {
+ 427   1        LCD12864_init_character();
+ 428   1        LCD12864_display_character(0,1,"选择操作方式");
+ 429   1        LCD12864_display_character(1,1,"打开");
+ 430   1        LCD12864_display_character(2,1,"暂停");
+ 431   1        LCD12864_display_character(3,1,"关闭");
+ 432   1        LCD12864_display_character(1,6,"返回");
+ 433   1        LCD12864_display_character(2,6,"指纹");
+ 434   1        LCD12864_display_character(3,6,"设置");
+ 435   1        if(strcmp(cmd,"open")==0)
+ 436   1          LCD12864_display_character(1,0,"->");
+ 437   1        if(strcmp(cmd,"stop")==0)
+ 438   1          LCD12864_display_character(2,0,"->");
+ 439   1        if(strcmp(cmd,"down")==0)
+ 440   1          LCD12864_display_character(3,0,"->");
+ 441   1        if(strcmp(cmd,"back")==0)
+ 442   1          LCD12864_display_character(1,5,"->");
+ 443   1        if(strcmp(cmd,"fingerprint")==0)
+ 444   1          LCD12864_display_character(2,5,"->");
+ 445   1        if(strcmp(cmd,"setting")==0)
+ 446   1          LCD12864_display_character(3,5,"->");
+ 447   1      
+ 448   1      }
+ 449          
+ 450          void display_control_screen_02_00 (uchar i,uchar *cmd)            //开门动画
+ 451          {
+ 452   1        if(i=='A')
+ 453   1        {
+ 454   2          if(strcmp(cmd,"open")==0)
+ 455   2          {
+ 456   3            if(time0_cartoon==0)
+ 457   3            {
+ 458   4              LCD12864_init_character();
+ 459   4              LCD12864_display_character(0,1,"A   ->  open");
+ 460   4                
+ 461   4              LCD12864_init_picture();
+ 462   4              LCD12864_display_picture(1,0,picture_door_A_10);
+ 463   4            }
+ 464   3            if(time0_cartoon==9)
+ 465   3              LCD12864_display_picture(1,0,picture_door_A_09);
+ 466   3            if(time0_cartoon==18)
+ 467   3              LCD12864_display_picture(1,0,picture_door_A_08);    
+ 468   3            if(time0_cartoon==27)
+ 469   3              LCD12864_display_picture(1,0,picture_door_A_07);    
+ 470   3            if(time0_cartoon==36)
+ 471   3              LCD12864_display_picture(1,0,picture_door_A_06);    
+ 472   3            if(time0_cartoon==45)
+ 473   3              LCD12864_display_picture(1,0,picture_door_A_05);    
+ 474   3            if(time0_cartoon==54)
+ 475   3              LCD12864_display_picture(1,0,picture_door_A_04);    
+ 476   3            if(time0_cartoon==63)
+ 477   3              LCD12864_display_picture(1,0,picture_door_A_03);    
+ 478   3            if(time0_cartoon==72)
+ 479   3              LCD12864_display_picture(1,0,picture_door_A_02);    
+ 480   3            if(time0_cartoon==81)
+ 481   3              LCD12864_display_picture(1,0,picture_door_A_01);    
+ 482   3            if(time0_cartoon==90)
+ 483   3              LCD12864_display_picture(1,0,picture_door_A_00);    
+ 484   3          }
+ 485   2          if(strcmp(cmd,"stop")==0)
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 9   
+
+ 486   2          {
+ 487   3            if(time0_cartoon==0)
+ 488   3            {
+ 489   4              LCD12864_init_character();
+ 490   4              LCD12864_display_character(0,1,"A   ->  stop");
+ 491   4                
+ 492   4              LCD12864_init_picture();
+ 493   4              LCD12864_display_picture(1,0,picture_door_A_05);
+ 494   4            }
+ 495   3            if(time0_cartoon==20)
+ 496   3              LCD12864_init_picture();
+ 497   3            if(time0_cartoon==40)
+ 498   3              LCD12864_display_picture(1,0,picture_door_A_05);
+ 499   3            if(time0_cartoon==60)
+ 500   3              LCD12864_init_picture();
+ 501   3            if(time0_cartoon==80)
+ 502   3              LCD12864_display_picture(1,0,picture_door_A_05);
+ 503   3          } 
+ 504   2          if(strcmp(cmd,"down")==0)
+ 505   2          {
+ 506   3            if(time0_cartoon==0)
+ 507   3            {
+ 508   4              LCD12864_init_character();
+ 509   4              LCD12864_display_character(0,1,"A   ->  down");
+ 510   4                
+ 511   4              LCD12864_init_picture();
+ 512   4              LCD12864_display_picture(1,0,picture_door_A_00);
+ 513   4            }
+ 514   3            if(time0_cartoon==9)
+ 515   3              LCD12864_display_picture(1,0,picture_door_A_01);
+ 516   3            if(time0_cartoon==18)
+ 517   3              LCD12864_display_picture(1,0,picture_door_A_02);    
+ 518   3            if(time0_cartoon==27)
+ 519   3              LCD12864_display_picture(1,0,picture_door_A_03);    
+ 520   3            if(time0_cartoon==36)
+ 521   3              LCD12864_display_picture(1,0,picture_door_A_04);    
+ 522   3            if(time0_cartoon==45)
+ 523   3              LCD12864_display_picture(1,0,picture_door_A_05);    
+ 524   3            if(time0_cartoon==54)
+ 525   3              LCD12864_display_picture(1,0,picture_door_A_06);    
+ 526   3            if(time0_cartoon==63)
+ 527   3              LCD12864_display_picture(1,0,picture_door_A_07);    
+ 528   3            if(time0_cartoon==72)
+ 529   3              LCD12864_display_picture(1,0,picture_door_A_08);    
+ 530   3            if(time0_cartoon==81)
+ 531   3              LCD12864_display_picture(1,0,picture_door_A_09);    
+ 532   3            if(time0_cartoon==90)
+ 533   3              LCD12864_display_picture(1,0,picture_door_A_10);    
+ 534   3          } 
+ 535   2        }
+ 536   1        
+ 537   1        if(i=='B')
+ 538   1        {
+ 539   2          if(strcmp(cmd,"open")==0)
+ 540   2          {
+ 541   3            if(time0_cartoon==0)
+ 542   3            {
+ 543   4              LCD12864_init_character();
+ 544   4              LCD12864_display_character(0,1,"B   ->  open");
+ 545   4                
+ 546   4              LCD12864_init_picture();
+ 547   4              LCD12864_display_picture(1,0,picture_door_B_10);
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 10  
+
+ 548   4            }
+ 549   3            if(time0_cartoon==9)
+ 550   3              LCD12864_display_picture(1,0,picture_door_B_09);
+ 551   3            if(time0_cartoon==18)
+ 552   3              LCD12864_display_picture(1,0,picture_door_B_08);    
+ 553   3            if(time0_cartoon==27)
+ 554   3              LCD12864_display_picture(1,0,picture_door_B_07);    
+ 555   3            if(time0_cartoon==36)
+ 556   3              LCD12864_display_picture(1,0,picture_door_B_06);    
+ 557   3            if(time0_cartoon==45)
+ 558   3              LCD12864_display_picture(1,0,picture_door_B_05);    
+ 559   3            if(time0_cartoon==54)
+ 560   3              LCD12864_display_picture(1,0,picture_door_B_04);    
+ 561   3            if(time0_cartoon==63)
+ 562   3              LCD12864_display_picture(1,0,picture_door_B_03);    
+ 563   3            if(time0_cartoon==72)
+ 564   3              LCD12864_display_picture(1,0,picture_door_B_02);    
+ 565   3            if(time0_cartoon==81)
+ 566   3              LCD12864_display_picture(1,0,picture_door_B_01);    
+ 567   3            if(time0_cartoon==90)
+ 568   3              LCD12864_display_picture(1,0,picture_door_B_00);    
+ 569   3          }
+ 570   2          if(strcmp(cmd,"stop")==0)
+ 571   2          {
+ 572   3            if(time0_cartoon==0)
+ 573   3            {
+ 574   4              LCD12864_init_character();
+ 575   4              LCD12864_display_character(0,1,"B   ->  stop");
+ 576   4                
+ 577   4              LCD12864_init_picture();
+ 578   4              LCD12864_display_picture(1,0,picture_door_B_05);
+ 579   4            }
+ 580   3            if(time0_cartoon==20)
+ 581   3              LCD12864_init_picture();
+ 582   3            if(time0_cartoon==40)
+ 583   3              LCD12864_display_picture(1,0,picture_door_B_05);
+ 584   3            if(time0_cartoon==60)
+ 585   3              LCD12864_init_picture();
+ 586   3            if(time0_cartoon==80)
+ 587   3              LCD12864_display_picture(1,0,picture_door_B_05);
+ 588   3          } 
+ 589   2          if(strcmp(cmd,"down")==0)
+ 590   2          {
+ 591   3            if(time0_cartoon==0)
+ 592   3            {
+ 593   4              LCD12864_init_character();
+ 594   4              LCD12864_display_character(0,1,"B   ->  down");
+ 595   4                
+ 596   4              LCD12864_init_picture();
+ 597   4              LCD12864_display_picture(1,0,picture_door_B_00);
+ 598   4            }
+ 599   3            if(time0_cartoon==9)
+ 600   3              LCD12864_display_picture(1,0,picture_door_B_01);
+ 601   3            if(time0_cartoon==18)
+ 602   3              LCD12864_display_picture(1,0,picture_door_B_02);    
+ 603   3            if(time0_cartoon==27)
+ 604   3              LCD12864_display_picture(1,0,picture_door_B_03);    
+ 605   3            if(time0_cartoon==36)
+ 606   3              LCD12864_display_picture(1,0,picture_door_B_04);    
+ 607   3            if(time0_cartoon==45)
+ 608   3              LCD12864_display_picture(1,0,picture_door_B_05);    
+ 609   3            if(time0_cartoon==54)
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 11  
+
+ 610   3              LCD12864_display_picture(1,0,picture_door_B_06);    
+ 611   3            if(time0_cartoon==63)
+ 612   3              LCD12864_display_picture(1,0,picture_door_B_07);    
+ 613   3            if(time0_cartoon==72)
+ 614   3              LCD12864_display_picture(1,0,picture_door_B_08);    
+ 615   3            if(time0_cartoon==81)
+ 616   3              LCD12864_display_picture(1,0,picture_door_B_09);    
+ 617   3            if(time0_cartoon==90)
+ 618   3              LCD12864_display_picture(1,0,picture_door_B_10);    
+ 619   3          } 
+ 620   2        }   
+ 621   1      
+ 622   1        if(i=='C')
+ 623   1        {
+ 624   2          if(strcmp(cmd,"open")==0)
+ 625   2          {
+ 626   3            if(time0_cartoon==0)
+ 627   3            {
+ 628   4              LCD12864_init_character();
+ 629   4              LCD12864_display_character(0,1,"C   ->  open");
+ 630   4                
+ 631   4              LCD12864_init_picture();
+ 632   4              LCD12864_display_picture(1,0,picture_door_C_10);
+ 633   4            }
+ 634   3            if(time0_cartoon==9)
+ 635   3              LCD12864_display_picture(1,0,picture_door_C_09);
+ 636   3            if(time0_cartoon==18)
+ 637   3              LCD12864_display_picture(1,0,picture_door_C_08);    
+ 638   3            if(time0_cartoon==27)
+ 639   3              LCD12864_display_picture(1,0,picture_door_C_07);    
+ 640   3            if(time0_cartoon==36)
+ 641   3              LCD12864_display_picture(1,0,picture_door_C_06);    
+ 642   3            if(time0_cartoon==45)
+ 643   3              LCD12864_display_picture(1,0,picture_door_C_05);    
+ 644   3            if(time0_cartoon==54)
+ 645   3              LCD12864_display_picture(1,0,picture_door_C_04);    
+ 646   3            if(time0_cartoon==63)
+ 647   3              LCD12864_display_picture(1,0,picture_door_C_03);    
+ 648   3            if(time0_cartoon==72)
+ 649   3              LCD12864_display_picture(1,0,picture_door_C_02);    
+ 650   3            if(time0_cartoon==81)
+ 651   3              LCD12864_display_picture(1,0,picture_door_C_01);    
+ 652   3            if(time0_cartoon==90)
+ 653   3              LCD12864_display_picture(1,0,picture_door_C_00);    
+ 654   3          }
+ 655   2          if(strcmp(cmd,"stop")==0)
+ 656   2          {
+ 657   3            if(time0_cartoon==0)
+ 658   3            {
+ 659   4              LCD12864_init_character();
+ 660   4              LCD12864_display_character(0,1,"C   ->  stop");
+ 661   4                
+ 662   4              LCD12864_init_picture();
+ 663   4              LCD12864_display_picture(1,0,picture_door_C_05);
+ 664   4            }
+ 665   3            if(time0_cartoon==20)
+ 666   3              LCD12864_init_picture();
+ 667   3            if(time0_cartoon==40)
+ 668   3              LCD12864_display_picture(1,0,picture_door_C_05);
+ 669   3            if(time0_cartoon==60)
+ 670   3              LCD12864_init_picture();
+ 671   3            if(time0_cartoon==80)
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 12  
+
+ 672   3              LCD12864_display_picture(1,0,picture_door_C_05);
+ 673   3          } 
+ 674   2          if(strcmp(cmd,"down")==0)
+ 675   2          {
+ 676   3            if(time0_cartoon==0)
+ 677   3            {
+ 678   4              LCD12864_init_character();
+ 679   4              LCD12864_display_character(0,1,"C   ->  down");
+ 680   4                
+ 681   4              LCD12864_init_picture();
+ 682   4              LCD12864_display_picture(1,0,picture_door_C_00);
+ 683   4            }
+ 684   3            if(time0_cartoon==9)
+ 685   3              LCD12864_display_picture(1,0,picture_door_C_01);
+ 686   3            if(time0_cartoon==18)
+ 687   3              LCD12864_display_picture(1,0,picture_door_C_02);    
+ 688   3            if(time0_cartoon==27)
+ 689   3              LCD12864_display_picture(1,0,picture_door_C_03);    
+ 690   3            if(time0_cartoon==36)
+ 691   3              LCD12864_display_picture(1,0,picture_door_C_04);    
+ 692   3            if(time0_cartoon==45)
+ 693   3              LCD12864_display_picture(1,0,picture_door_C_05);    
+ 694   3            if(time0_cartoon==54)
+ 695   3              LCD12864_display_picture(1,0,picture_door_C_06);    
+ 696   3            if(time0_cartoon==63)
+ 697   3              LCD12864_display_picture(1,0,picture_door_C_07);    
+ 698   3            if(time0_cartoon==72)
+ 699   3              LCD12864_display_picture(1,0,picture_door_C_08);    
+ 700   3            if(time0_cartoon==81)
+ 701   3              LCD12864_display_picture(1,0,picture_door_C_09);    
+ 702   3            if(time0_cartoon==90)
+ 703   3              LCD12864_display_picture(1,0,picture_door_C_10);    
+ 704   3          } 
+ 705   2        }   
+ 706   1      
+ 707   1        if(i=='D')
+ 708   1        {
+ 709   2          if(strcmp(cmd,"open")==0)
+ 710   2          {
+ 711   3            if(time0_cartoon==0)
+ 712   3            {
+ 713   4              LCD12864_init_character();
+ 714   4              LCD12864_display_character(0,1,"D   ->  open");
+ 715   4                
+ 716   4              LCD12864_init_picture();
+ 717   4              LCD12864_display_picture(1,0,picture_door_D_10);
+ 718   4            }
+ 719   3            if(time0_cartoon==9)
+ 720   3              LCD12864_display_picture(1,0,picture_door_D_09);
+ 721   3            if(time0_cartoon==18)
+ 722   3              LCD12864_display_picture(1,0,picture_door_D_08);    
+ 723   3            if(time0_cartoon==27)
+ 724   3              LCD12864_display_picture(1,0,picture_door_D_07);    
+ 725   3            if(time0_cartoon==36)
+ 726   3              LCD12864_display_picture(1,0,picture_door_D_06);    
+ 727   3            if(time0_cartoon==45)
+ 728   3              LCD12864_display_picture(1,0,picture_door_D_05);    
+ 729   3            if(time0_cartoon==54)
+ 730   3              LCD12864_display_picture(1,0,picture_door_D_04);    
+ 731   3            if(time0_cartoon==63)
+ 732   3              LCD12864_display_picture(1,0,picture_door_D_03);    
+ 733   3            if(time0_cartoon==72)
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 13  
+
+ 734   3              LCD12864_display_picture(1,0,picture_door_D_02);    
+ 735   3            if(time0_cartoon==81)
+ 736   3              LCD12864_display_picture(1,0,picture_door_D_01);    
+ 737   3            if(time0_cartoon==90)
+ 738   3              LCD12864_display_picture(1,0,picture_door_D_00);    
+ 739   3          }
+ 740   2          if(strcmp(cmd,"stop")==0)
+ 741   2          {
+ 742   3            if(time0_cartoon==0)
+ 743   3            {
+ 744   4              LCD12864_init_character();
+ 745   4              LCD12864_display_character(0,1,"D   ->  stop");
+ 746   4                
+ 747   4              LCD12864_init_picture();
+ 748   4              LCD12864_display_picture(1,0,picture_door_D_05);
+ 749   4            }
+ 750   3            if(time0_cartoon==20)
+ 751   3              LCD12864_init_picture();
+ 752   3            if(time0_cartoon==40)
+ 753   3              LCD12864_display_picture(1,0,picture_door_D_05);
+ 754   3            if(time0_cartoon==60)
+ 755   3              LCD12864_init_picture();
+ 756   3            if(time0_cartoon==80)
+ 757   3              LCD12864_display_picture(1,0,picture_door_D_05);
+ 758   3          } 
+ 759   2          if(strcmp(cmd,"down")==0)
+ 760   2          {
+ 761   3            if(time0_cartoon==0)
+ 762   3            {
+ 763   4              LCD12864_init_character();
+ 764   4              LCD12864_display_character(0,1,"D   ->  down");
+ 765   4                
+ 766   4              LCD12864_init_picture();
+ 767   4              LCD12864_display_picture(1,0,picture_door_D_00);
+ 768   4            }
+ 769   3            if(time0_cartoon==9)
+ 770   3              LCD12864_display_picture(1,0,picture_door_D_01);
+ 771   3            if(time0_cartoon==18)
+ 772   3              LCD12864_display_picture(1,0,picture_door_D_02);    
+ 773   3            if(time0_cartoon==27)
+ 774   3              LCD12864_display_picture(1,0,picture_door_D_03);    
+ 775   3            if(time0_cartoon==36)
+ 776   3              LCD12864_display_picture(1,0,picture_door_D_04);    
+ 777   3            if(time0_cartoon==45)
+ 778   3              LCD12864_display_picture(1,0,picture_door_D_05);    
+ 779   3            if(time0_cartoon==54)
+ 780   3              LCD12864_display_picture(1,0,picture_door_D_06);    
+ 781   3            if(time0_cartoon==63)
+ 782   3              LCD12864_display_picture(1,0,picture_door_D_07);    
+ 783   3            if(time0_cartoon==72)
+ 784   3              LCD12864_display_picture(1,0,picture_door_D_08);    
+ 785   3            if(time0_cartoon==81)
+ 786   3              LCD12864_display_picture(1,0,picture_door_D_09);    
+ 787   3            if(time0_cartoon==90)
+ 788   3              LCD12864_display_picture(1,0,picture_door_D_10);    
+ 789   3          } 
+ 790   2        }   
+ 791   1          
+ 792   1      }
+ 793          
+ 794          
+ 795          
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 14  
+
+ 796          void display_control_screen_02_01 (uchar *cmd)            //指纹设置
+ 797          {
+ 798   1        LCD12864_init_character();
+ 799   1        LCD12864_display_character(0,2,"添加指纹");
+ 800   1        LCD12864_display_character(1,2,"删去指纹");
+ 801   1        LCD12864_display_character(2,2,"删去所有");
+ 802   1        LCD12864_display_character(3,2,"比对等级");
+ 803   1        if(strcmp(cmd,"add")==0)
+ 804   1          LCD12864_display_character(0,0," -> ");
+ 805   1        if(strcmp(cmd,"delete")==0)
+ 806   1          LCD12864_display_character(1,0," -> ");
+ 807   1        if(strcmp(cmd,"delete_all")==0)
+ 808   1          LCD12864_display_character(2,0," -> ");
+ 809   1        if(strcmp(cmd,"security_level")==0)
+ 810   1          LCD12864_display_character(3,0," -> ");
+ 811   1      }
+ 812          
+ 813          void display_control_screen_02_02 (uchar *cmd)            //快速开门
+ 814          {
+ 815   1        LCD12864_init_character();
+ 816   1        LCD12864_display_character(0,0,"当前快门 -> ");
+ 817   1        LCD12864_display_character(1,1," B");
+ 818   1        LCD12864_display_character(2,1," C");
+ 819   1        LCD12864_display_character(3,1,"BC");
+ 820   1        LCD12864_display_character(1,6,"ABCD");
+ 821   1        LCD12864_display_character(2,6,"  无");
+ 822   1        LCD12864_display_character(3,6,"返回");
+ 823   1        if(strcmp(cmd,"B")==0)
+ 824   1          LCD12864_display_character(1,0,"->");
+ 825   1        if(strcmp(cmd,"C")==0)
+ 826   1          LCD12864_display_character(2,0,"->");
+ 827   1        if(strcmp(cmd,"BC")==0)
+ 828   1          LCD12864_display_character(3,0,"->");
+ 829   1        if(strcmp(cmd,"ABCD")==0)
+ 830   1          LCD12864_display_character(1,5,"->");
+ 831   1        if(strcmp(cmd,"无")==0)
+ 832   1          LCD12864_display_character(2,5,"->");
+ 833   1        if(strcmp(cmd,"back")==0)
+ 834   1          LCD12864_display_character(3,5,"->");
+ 835   1      
+ 836   1      }
+ 837          
+ 838          
+ 839          void control_door (uchar door,uchar *cmd)
+ 840          {
+ 841   1        if(door=='A')
+ 842   1        {
+ 843   2          if(strcmp(cmd,"open")==0)
+ 844   2          {
+ 845   3            relay_A_open=0;
+ 846   3            delay_10us(1000);
+ 847   3            relay_A_open=1; 
+ 848   3          }
+ 849   2          if(strcmp(cmd,"stop")==0)
+ 850   2          {
+ 851   3            relay_A_stop=0;
+ 852   3            delay_10us(1000);
+ 853   3            relay_A_stop=1; 
+ 854   3          } 
+ 855   2          if(strcmp(cmd,"down")==0)
+ 856   2          {
+ 857   3            relay_A_down=0;
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 15  
+
+ 858   3            delay_10us(1000);
+ 859   3            relay_A_down=1; 
+ 860   3          }   
+ 861   2        }
+ 862   1        if(door=='B')
+ 863   1        {
+ 864   2          if(strcmp(cmd,"open")==0)
+ 865   2          {
+ 866   3            relay_B_open=0;
+ 867   3            delay_10us(1000);
+ 868   3            relay_B_open=1; 
+ 869   3          }
+ 870   2          if(strcmp(cmd,"stop")==0)
+ 871   2          {
+ 872   3            relay_B_stop=0;
+ 873   3            delay_10us(1000);
+ 874   3            relay_B_stop=1; 
+ 875   3          } 
+ 876   2          if(strcmp(cmd,"down")==0)
+ 877   2          {
+ 878   3            relay_B_down=0;
+ 879   3            delay_10us(1000);
+ 880   3            relay_B_down=1; 
+ 881   3          }   
+ 882   2        } 
+ 883   1        if(door=='C')
+ 884   1        {
+ 885   2          if(strcmp(cmd,"open")==0)
+ 886   2          {
+ 887   3            relay_C_open=0;
+ 888   3            delay_10us(1000);
+ 889   3            relay_C_open=1; 
+ 890   3          }
+ 891   2          if(strcmp(cmd,"stop")==0)
+ 892   2          {
+ 893   3            relay_C_stop=0;
+ 894   3            delay_10us(1000);
+ 895   3            relay_C_stop=1; 
+ 896   3          } 
+ 897   2          if(strcmp(cmd,"down")==0)
+ 898   2          {
+ 899   3            relay_C_down=0; 
+ 900   3            delay_10us(1000);
+ 901   3            relay_C_down=1; 
+ 902   3          }   
+ 903   2        } 
+ 904   1        if(door=='D')
+ 905   1        {
+ 906   2          if(strcmp(cmd,"open")==0)
+ 907   2          {
+ 908   3            relay_D_open=0;
+ 909   3            delay_10us(1000);
+ 910   3            relay_D_open=1; 
+ 911   3          }
+ 912   2          if(strcmp(cmd,"stop")==0)
+ 913   2          {
+ 914   3            relay_D_stop=0;
+ 915   3            delay_10us(1000);
+ 916   3            relay_D_stop=1; 
+ 917   3          } 
+ 918   2          if(strcmp(cmd,"down")==0)
+ 919   2          {
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 16  
+
+ 920   3            relay_D_down=0;
+ 921   3            delay_10us(1000);
+ 922   3            relay_D_down=1; 
+ 923   3          }   
+ 924   2        } 
+ 925   1        
+ 926   1      }
+ 927          
+ 928          
+ 929          void init_UART (void)
+ 930          {
+ 931   1          TMOD = 0x21; //T0定时器 T1 波特率发生器
+ 932   1          SCON = 0x50;
+ 933   1          TH1 = 0xFD;
+ 934   1          TL1 = TH1;
+ 935   1          PCON = 0x80;
+ 936   1          EA = 1;
+ 937   1          ES = 1;
+ 938   1          TR1 = 1;
+ 939   1      
+ 940   1        PS=1;     //串口优先级高
+ 941   1      }
+ 942          void init_time0 (void)
+ 943          {
+ 944   1          TMOD = 0x21; //T0定时器 T1 波特率发生器
+ 945   1          TH0 = 0x4C;  //50ms
+ 946   1          TL0 = 0x00;
+ 947   1          EA = 1;
+ 948   1          ET0 = 1;
+ 949   1          TR0 = 1;
+ 950   1      }
+ 951          
+ 952          void send_one_byte (uchar c)
+ 953          {
+ 954   1          SBUF = c;
+ 955   1          while(!TI);
+ 956   1          TI = 0;
+ 957   1      }
+ 958          
+ 959          void UART_interrupt (void) interrupt 4
+ 960          {
+ 961   1        static uchar i=0;
+ 962   1          if(RI)
+ 963   1          {
+ 964   2              RI = 0;
+ 965   2          receive_data[i]=SBUF;
+ 966   2          i++;
+ 967   2          if(i==8)
+ 968   2            i=0;
+ 969   2          }
+ 970   1      }
+ 971          
+ 972          
+ 973          
+ 974          
+ 975          
+ 976          
+ 977          
+ 978          
+ 979          
+ 980          
+ 981          
+C51 COMPILER V9.60.0.0   MAIN_FUNCTION                                                     05/16/2020 14:51:04 PAGE 17  
+
+ 982          
+ 983          
+ 984          
+ 985          
+ 986          
+ 987          
+ 988          
+ 989          
+ 990          
+ 991          
+ 992          
+ 993          
+ 994          
+ 995          
+ 996          
+ 997          
+ 998          
+ 999          
+1000          
+1001          
+1002          
+1003          
+1004          
+1005          
+1006          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   5065    ----
+   CONSTANT SIZE    =  35035    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      1      18
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

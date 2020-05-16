@@ -1,0 +1,8 @@
+".\output\DS18B20.obj",
+".\output\LCD12864.obj",
+".\output\main.obj",
+".\output\main_function.obj",
+".\output\ZW_SZM201.obj" 
+TO ".\output\zw_project" 
+PRINT(".\output\zw_project.m51") RAMSIZE(256) 
+XDATA( 0X0000-0X00FF )

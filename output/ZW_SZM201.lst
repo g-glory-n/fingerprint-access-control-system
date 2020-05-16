@@ -1,0 +1,178 @@
+C51 COMPILER V9.60.0.0   ZW_SZM201                                                         05/16/2020 14:51:05 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE ZW_SZM201
+OBJECT MODULE PLACED IN .\output\ZW_SZM201.obj
+COMPILER INVOKED BY: D:\Softwares\Keil_v5\C51\BIN\C51.EXE src\ZW_SZM201.c OPTIMIZE(8,SPEED) BROWSE INCDIR(.\inc) DEBUG O
+                    -BJECTEXTEND PRINT(.\output\ZW_SZM201.lst) TABS(2) OBJECT(.\output\ZW_SZM201.obj)
+
+line level    source
+
+   1          #include "ZW_SZM201.h"
+   2          #include "main.h"
+   3          
+   4          #include "string.h"
+   5          #include "intrins.h"
+   6          #include "reg52.h"
+   7          #include "stdio.h"
+   8          
+   9          
+  10          
+  11          
+  12          
+  13          void ZW_SZW201_cmd (uchar parameter_1,uchar parameter_2,uchar parameter_3,uchar *cmd)    //parameter_1用户
+             -号高八位;parameter_2用户号低八位;parameter_3权限
+  14          {
+  15   1        uchar CHK=0;                  //CHK为2-6数据字节异或值
+  16   1        if(strcmp(cmd,"compare")==0)
+  17   1        {
+  18   2          send_one_byte(0xf5);
+  19   2          send_one_byte(0x0c);
+  20   2          send_one_byte(0x00);
+  21   2          send_one_byte(0x00);
+  22   2          send_one_byte(0x00);
+  23   2          send_one_byte(0x00);
+  24   2          send_one_byte(0x0c);
+  25   2          send_one_byte(0xf5);
+  26   2        }
+  27   1        if(strcmp(cmd,"sleep")==0)
+  28   1        {
+  29   2          send_one_byte(0xf5);
+  30   2          send_one_byte(0x2c);
+  31   2          send_one_byte(0x00);
+  32   2          send_one_byte(0x00);
+  33   2          send_one_byte(0x00);
+  34   2          send_one_byte(0x00);
+  35   2          send_one_byte(0x2c);
+  36   2          send_one_byte(0xf5);
+  37   2        }
+  38   1        
+  39   1          
+  40   1        if(strcmp(cmd,"add_1")==0)
+  41   1        {
+  42   2          CHK=0x01^parameter_1^parameter_2^parameter_3;
+  43   2          send_one_byte(0xf5);
+  44   2          send_one_byte(0x01);
+  45   2          send_one_byte(parameter_1);
+  46   2          send_one_byte(parameter_2);
+  47   2          send_one_byte(parameter_3);
+  48   2          send_one_byte(0x00);
+  49   2          send_one_byte(CHK);
+  50   2          send_one_byte(0xf5);
+  51   2        }
+  52   1        if(strcmp(cmd,"add_2")==0)
+  53   1        {
+C51 COMPILER V9.60.0.0   ZW_SZM201                                                         05/16/2020 14:51:05 PAGE 2   
+
+  54   2          CHK=0x02^parameter_1^parameter_2^parameter_3;
+  55   2          send_one_byte(0xf5);
+  56   2          send_one_byte(0x02);
+  57   2          send_one_byte(parameter_1);
+  58   2          send_one_byte(parameter_2);
+  59   2          send_one_byte(parameter_3);
+  60   2          send_one_byte(0x00);
+  61   2          send_one_byte(CHK);
+  62   2          send_one_byte(0xf5);
+  63   2        } 
+  64   1        if(strcmp(cmd,"add_3")==0)
+  65   1        {
+  66   2          CHK=0x03^parameter_1^parameter_2^parameter_3;
+  67   2          send_one_byte(0xf5);
+  68   2          send_one_byte(0x03);
+  69   2          send_one_byte(parameter_1);
+  70   2          send_one_byte(parameter_2);
+  71   2          send_one_byte(parameter_3);
+  72   2          send_one_byte(0x00);
+  73   2          send_one_byte(CHK);
+  74   2          send_one_byte(0xf5);
+  75   2        } 
+  76   1        if(strcmp(cmd,"delete")==0)
+  77   1        {
+  78   2          CHK=0x04^parameter_1^parameter_2;
+  79   2          send_one_byte(0xf5);
+  80   2          send_one_byte(0x04);
+  81   2          send_one_byte(parameter_1);
+  82   2          send_one_byte(parameter_2);
+  83   2          send_one_byte(0x00);
+  84   2          send_one_byte(0x00);
+  85   2          send_one_byte(CHK);
+  86   2          send_one_byte(0xf5);
+  87   2        }
+  88   1        if(strcmp(cmd,"delete_all")==0)
+  89   1        {
+  90   2          send_one_byte(0xf5);
+  91   2          send_one_byte(0x05);
+  92   2          send_one_byte(0x00);
+  93   2          send_one_byte(0x00);
+  94   2          send_one_byte(0x00);
+  95   2          send_one_byte(0x00);
+  96   2          send_one_byte(0x05);
+  97   2          send_one_byte(0xf5);
+  98   2        }
+  99   1        if(strcmp(cmd,"security_level")==0)
+ 100   1        {
+ 101   2          CHK=0x28^parameter_1;
+ 102   2          send_one_byte(0xf5);
+ 103   2          send_one_byte(0x28);
+ 104   2          send_one_byte(0x00);
+ 105   2          send_one_byte(parameter_1);   //parameter_1新的比对等级;0-9级;9级最高;默认为5级
+ 106   2          send_one_byte(0x00);
+ 107   2          send_one_byte(0x00);
+ 108   2          send_one_byte(CHK);
+ 109   2          send_one_byte(0xf5);
+ 110   2        }
+ 111   1          
+ 112   1        
+ 113   1      }
+ 114          
+ 115          
+C51 COMPILER V9.60.0.0   ZW_SZM201                                                         05/16/2020 14:51:05 PAGE 3   
+
+ 116          
+ 117          
+ 118          
+ 119          
+ 120          
+ 121          
+ 122          
+ 123          
+ 124          
+ 125          
+ 126          
+ 127          
+ 128          
+ 129          
+ 130          
+ 131          
+ 132          
+ 133          
+ 134          
+ 135          
+ 136          
+ 137          
+ 138          
+ 139          
+ 140          
+ 141          
+ 142          
+ 143          
+ 144          
+ 145          
+ 146          
+ 147          
+ 148          
+ 149          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    550    ----
+   CONSTANT SIZE    =     65    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       7
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

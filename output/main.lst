@@ -1,0 +1,1360 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\output\main.obj
+COMPILER INVOKED BY: D:\Softwares\Keil_v5\C51\BIN\C51.EXE src\main.c OPTIMIZE(8,SPEED) BROWSE INCDIR(.\inc) DEBUG OBJECT
+                    -EXTEND PRINT(.\output\main.lst) TABS(2) OBJECT(.\output\main.obj)
+
+line level    source
+
+   1          #include "main.h"
+   2          #include "LCD12864.h"
+   3          #include "ZW_SZM201.h"
+   4          #include "DS18B20.h"
+   5          //#include "picture.h"  注意 图片数组 重复定义!!!!
+   6          
+   7          #include "intrins.h"
+   8          #include "string.h"
+   9          #include "reg52.h"
+  10          #include "stdio.h"
+  11          
+  12          uchar receive_data[8]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};     //成功0xf5,0x0c,0x00,0x01,0x01,0x00,0
+             -x0c,0xf5
+  13          
+  14          char temperature_string[8]={':',' ',' ',' ',' ',' ',' ',' '};
+  15          
+  16          float temperature=0.0;
+  17                                             
+  18          bit open_lock=0;
+  19          
+  20          bit flag_compare=0;
+  21          bit flag_control_door=0;
+  22          bit flag_quick_door=0;
+  23          bit flag_display_screen=0;
+  24          bit flag_buzzer=0;
+  25          
+  26          uchar parameter_1=0;
+  27          uchar parameter_2=0;
+  28          uchar parameter_3=0;
+  29          
+  30          char array_parameter_1[4]={' ',' ',' ',' '};    //向后写入4字节 防止写入溢出 显示问题
+  31          char array_parameter_2[4]={' ',' ',' ',' '};
+  32          char array_parameter_3[4]={' ',' ',' ',' '};
+  33          
+  34          uchar parameter=0;
+  35          
+  36          uchar time0_lock=0;
+  37          uchar time0_init_screen=0;
+  38          uchar time0_cartoon=0;
+  39          uchar time0_buzzer=0;
+  40          
+  41          uchar buzzer_quantity=0;
+  42          uchar buzzer_low_time=0;
+  43          uchar buzzer_high_time=0;
+  44          
+  45          
+  46          uchar quick_door=0;
+  47          
+  48          uint count_options=0;
+  49          uchar count_confirm=0;
+  50          uchar copy_count_options=0;
+  51          
+  52          
+  53          
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 2   
+
+  54          uchar door=0;                   //记录门选项
+  55           
+  56          void main (void)
+  57          {
+  58   1        init_UART();                  //初始化串口
+  59   1        init_time0();                 //初始化T0
+  60   1        LCD12864_restart();               //上电复位LCD12864
+  61   1      
+  62   1        P0=0xff;  
+  63   1        P1=0xff;
+  64   1        P2=0xff;
+  65   1        P3=0xff;                    //端口置高
+  66   1      
+  67   1          buzzer_quantity=3;
+  68   1        buzzer_low_time=10;
+  69   1        buzzer_high_time=10;              //开机提示音
+  70   1      
+  71   1        control_door('A',"stop");
+  72   1        control_door('B',"stop");
+  73   1        control_door('C',"stop");
+  74   1        control_door('D',"stop");           //上电停门
+  75   1      
+  76   1        temperature=ds18b20_count_temperature();  //测量温度
+  77   1      
+  78   1        delay_10us(50000);                //上电延时  等待指纹模块
+  79   1        delay_10us(50000);
+  80   1        ZW_SZW201_cmd(0,0,0,"compare");       //指纹模块1:N指令
+  81   1      
+  82   1        display_init_screen_00();
+  83   1        time0_init_screen=0;
+  84   1        
+  85   1        while(1)
+  86   1        {
+  87   2          examine_lock();
+  88   2      
+  89   2          if(open_lock==0)
+  90   2          {
+  91   3      
+  92   3              if(time0_init_screen==100)
+  93   3            { 
+  94   4              temperature=ds18b20_count_temperature();              //影响stop按键不灵现象 温度改变时 ds18b20需要反应时间
+  95   4              sprintf((temperature_string+1),"%2.2f",temperature);
+  96   4                          
+  97   4              display_init_screen_01();                     // 5s 幻灯片1;
+  98   4            }
+  99   3            if(time0_init_screen>=200)                        //10s 幻灯片2;
+ 100   3            { 
+ 101   4              temperature=ds18b20_count_temperature();                
+ 102   4              sprintf((temperature_string+1),"%2.2f",temperature);
+ 103   4      
+ 104   4              time0_init_screen=0;                        //定时重置        
+ 105   4              ZW_SZW201_cmd(0,0,0,"compare");                   //每5s钟发送1:N比对指令
+ 106   4              display_init_screen_00();
+ 107   4            }
+ 108   3      
+ 109   3            if(back_stop==0)                            //上锁时暂停
+ 110   3            {                                   
+ 111   4              delay_10us(1000);
+ 112   4              if(back_stop==0)
+ 113   4              {
+ 114   5                buzzer=0;
+ 115   5                relay_A_stop=0;
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 3   
+
+ 116   5                relay_B_stop=0;
+ 117   5                relay_C_stop=0;
+ 118   5                relay_D_stop=0;
+ 119   5      
+ 120   5                delay_10us(2000);
+ 121   5      
+ 122   5                relay_A_stop=1;
+ 123   5                relay_B_stop=1;
+ 124   5                relay_C_stop=1;
+ 125   5                relay_D_stop=1;
+ 126   5              }
+ 127   4              while(!back_stop);
+ 128   4              buzzer=1;
+ 129   4            }
+ 130   3          }
+ 131   2      
+ 132   2          if(open_lock==1)
+ 133   2          {
+ 134   3            examine_key ();
+ 135   3      
+ 136   3            if(count_confirm==0)
+ 137   3            {
+ 138   4              if(flag_display_screen)
+ 139   4              {
+ 140   5                if(count_options==0)
+ 141   5                  display_control_screen_00('A');
+ 142   5                if(count_options==1)
+ 143   5                  display_control_screen_00('B');
+ 144   5                if(count_options==2)
+ 145   5                  display_control_screen_00('C');
+ 146   5                if(count_options==3)
+ 147   5                  display_control_screen_00('D');
+ 148   5                flag_display_screen=0;
+ 149   5              }
+ 150   4            }
+ 151   3            
+ 152   3      
+ 153   3      
+ 154   3      
+ 155   3      
+ 156   3      
+ 157   3      
+ 158   3      
+ 159   3            if(count_confirm==1)
+ 160   3            {
+ 161   4              if(flag_display_screen)
+ 162   4              {
+ 163   5                if(copy_count_options==0)
+ 164   5                  door='A';
+ 165   5                if(copy_count_options==1)
+ 166   5                  door='B';
+ 167   5                if(copy_count_options==2)
+ 168   5                  door='C';
+ 169   5                if(copy_count_options==3)
+ 170   5                  door='D';
+ 171   5                if(count_options==4)        
+ 172   5                  display_control_screen_01("open");          
+ 173   5                if(count_options==5)
+ 174   5                  display_control_screen_01("stop");  
+ 175   5                if(count_options==6)
+ 176   5                  display_control_screen_01("down");  
+ 177   5                if(count_options==7)
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 4   
+
+ 178   5                  display_control_screen_01("back");  
+ 179   5                if(count_options==8)
+ 180   5                  display_control_screen_01("fingerprint");
+ 181   5                if(count_options==9)
+ 182   5                  display_control_screen_01("setting");
+ 183   5                flag_display_screen=0;
+ 184   5              }
+ 185   4            }
+ 186   3      
+ 187   3      
+ 188   3      
+ 189   3      
+ 190   3      
+ 191   3      
+ 192   3      
+ 193   3      
+ 194   3            if(count_confirm==2)
+ 195   3            {
+ 196   4              if(copy_count_options==4)
+ 197   4              {
+ 198   5                if(flag_control_door==1)
+ 199   5                {
+ 200   6                  control_door(door,"stop");
+ 201   6                  delay_10us(2000);
+ 202   6                  control_door(door,"open");
+ 203   6                  
+ 204   6                  buzzer_quantity=20;
+ 205   6                  buzzer_low_time=2;
+ 206   6                  buzzer_high_time=2;
+ 207   6      
+ 208   6                  time0_cartoon=0;
+ 209   6                  flag_control_door=0;
+ 210   6                }
+ 211   5                display_control_screen_02_00 (door,"open");
+ 212   5              }
+ 213   4              if(copy_count_options==5)
+ 214   4              {
+ 215   5                if(flag_control_door==1)
+ 216   5                {
+ 217   6                  control_door(door,"stop");
+ 218   6                  
+ 219   6                  buzzer_quantity=20;
+ 220   6                  buzzer_low_time=2;
+ 221   6                  buzzer_high_time=2;
+ 222   6      
+ 223   6                  time0_cartoon=0;
+ 224   6                  flag_control_door=0;
+ 225   6                }
+ 226   5                display_control_screen_02_00 (door,"stop");
+ 227   5              }
+ 228   4              if(copy_count_options==6)
+ 229   4              {
+ 230   5                if(flag_control_door==1)
+ 231   5                {
+ 232   6                  control_door(door,"stop");
+ 233   6                  delay_10us(2000);
+ 234   6                  control_door(door,"down");
+ 235   6      
+ 236   6                  buzzer_quantity=20;
+ 237   6                  buzzer_low_time=2;
+ 238   6                  buzzer_high_time=2;
+ 239   6      
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 5   
+
+ 240   6                  time0_cartoon=0;
+ 241   6                  flag_control_door=0;
+ 242   6                }
+ 243   5                display_control_screen_02_00 (door,"down");
+ 244   5              }
+ 245   4              if(copy_count_options==7)
+ 246   4              {
+ 247   5                count_confirm=0;
+ 248   5                copy_count_options=0;
+ 249   5                count_options=0;
+ 250   5      
+ 251   5              }
+ 252   4      
+ 253   4      
+ 254   4      
+ 255   4      
+ 256   4              if(copy_count_options==8&&receive_data[4]==0x03)
+ 257   4              {
+ 258   5                if(flag_display_screen)
+ 259   5                {
+ 260   6                  if(count_options==16)       
+ 261   6                    display_control_screen_02_01("add");          
+ 262   6                  if(count_options==17)
+ 263   6                    display_control_screen_02_01("delete"); 
+ 264   6                  if(count_options==18)
+ 265   6                    display_control_screen_02_01("delete_all"); 
+ 266   6                  if(count_options==19)
+ 267   6                    display_control_screen_02_01("security_level");
+ 268   6                  flag_display_screen=0;
+ 269   6                }
+ 270   5              }
+ 271   4      
+ 272   4      
+ 273   4              if(copy_count_options==8&&(receive_data[4]==0x01||receive_data[4]==0x02))
+ 274   4              {
+ 275   5                LCD12864_init_character();
+ 276   5                LCD12864_display_character(1,2,"请提供");   
+ 277   5                LCD12864_display_character(2,1,"管理员指纹!!");
+ 278   5      
+ 279   5                buzzer_quantity=1;
+ 280   5                buzzer_low_time=20;
+ 281   5                buzzer_high_time=0;
+ 282   5      
+ 283   5                delay_10us(50000);
+ 284   5                delay_10us(50000);
+ 285   5                delay_10us(50000);
+ 286   5                delay_10us(50000);
+ 287   5                delay_10us(50000);
+ 288   5                delay_10us(50000);
+ 289   5                count_confirm=0;
+ 290   5                copy_count_options=0;
+ 291   5                count_options=0;
+ 292   5                time0_lock=100;
+ 293   5                continue;
+ 294   5              }
+ 295   4      
+ 296   4      
+ 297   4      
+ 298   4      
+ 299   4      
+ 300   4              if(copy_count_options==9)
+ 301   4              {
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 6   
+
+ 302   5                if(flag_display_screen)
+ 303   5                {
+ 304   6                  if(count_options==10)       
+ 305   6                    display_control_screen_02_02("B");          
+ 306   6                  if(count_options==11)
+ 307   6                    display_control_screen_02_02("C");  
+ 308   6                  if(count_options==12)
+ 309   6                    display_control_screen_02_02("BC"); 
+ 310   6                  if(count_options==13)
+ 311   6                    display_control_screen_02_02("ABCD"); 
+ 312   6                  if(count_options==14)
+ 313   6                    display_control_screen_02_02("无");
+ 314   6                  if(count_options==15)
+ 315   6                    display_control_screen_02_02("back");
+ 316   6                  if(quick_door==0)
+ 317   6                    LCD12864_display_character(0,6,"  无");           
+ 318   6                  if(quick_door==1)
+ 319   6                    LCD12864_display_character(0,6,"   B");           
+ 320   6                  if(quick_door==2)
+ 321   6                    LCD12864_display_character(0,6,"   C");           
+ 322   6                  if(quick_door==3)
+ 323   6                    LCD12864_display_character(0,6,"  BC");           
+ 324   6                  if(quick_door==4)
+ 325   6                    LCD12864_display_character(0,6,"ABCD");
+ 326   6                  flag_display_screen=0;  
+ 327   6                }           
+ 328   5                  
+ 329   5              }
+ 330   4            }
+ 331   3      
+ 332   3      
+ 333   3      
+ 334   3      
+ 335   3      
+ 336   3      
+ 337   3      
+ 338   3      
+ 339   3      
+ 340   3            if(count_confirm==3)
+ 341   3            {
+ 342   4              if(copy_count_options==4||copy_count_options==5||copy_count_options==6)
+ 343   4              {
+ 344   5                count_confirm=0;
+ 345   5                copy_count_options=0;
+ 346   5                count_options=0;         //屏幕及选项重置
+ 347   5                time0_lock=0;
+ 348   5      
+ 349   5                  buzzer_quantity=0;
+ 350   5                buzzer_low_time=0;
+ 351   5                buzzer_high_time=0;          //暂停声音
+ 352   5      
+ 353   5              }
+ 354   4      
+ 355   4      
+ 356   4      
+ 357   4              if(copy_count_options==16)
+ 358   4              {
+ 359   5                sprintf(array_parameter_1,"%02d",(uint)parameter_1);
+ 360   5                sprintf(array_parameter_2,"%02d",(uint)parameter_2);
+ 361   5                sprintf(array_parameter_3,"%02d",(uint)parameter_3);
+ 362   5                if(count_options==20)
+ 363   5                {
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 7   
+
+ 364   6                  LCD12864_init_character();
+ 365   6                  LCD12864_display_character(0,3,"高位: ");
+ 366   6                  LCD12864_display_character(1,3,"低位: ");
+ 367   6                  LCD12864_display_character(2,3,"权限: ");
+ 368   6                  LCD12864_display_character(3,3,"确认");
+ 369   6      
+ 370   6                  LCD12864_display_character(0,6,array_parameter_1);
+ 371   6                  LCD12864_display_character(1,6,array_parameter_2);
+ 372   6                  LCD12864_display_character(2,6,array_parameter_3);
+ 373   6      
+ 374   6                  LCD12864_display_character(0,0," -> ");
+ 375   6                }
+ 376   5                if(count_options==21)
+ 377   5                {
+ 378   6                  LCD12864_init_character();
+ 379   6                  LCD12864_display_character(0,3,"高位: ");
+ 380   6                  LCD12864_display_character(1,3,"低位: ");
+ 381   6                  LCD12864_display_character(2,3,"权限: ");
+ 382   6                  LCD12864_display_character(3,3,"确认");
+ 383   6      
+ 384   6                  LCD12864_display_character(0,6,array_parameter_1);
+ 385   6                  LCD12864_display_character(1,6,array_parameter_2);
+ 386   6                  LCD12864_display_character(2,6,array_parameter_3);
+ 387   6      
+ 388   6                  LCD12864_display_character(1,0," -> ");
+ 389   6                }
+ 390   5                if(count_options==22)
+ 391   5                {
+ 392   6                  LCD12864_init_character();
+ 393   6                  LCD12864_display_character(0,3,"高位: ");
+ 394   6                  LCD12864_display_character(1,3,"低位: ");
+ 395   6                  LCD12864_display_character(2,3,"权限: ");
+ 396   6                  LCD12864_display_character(3,3,"确认");
+ 397   6      
+ 398   6                  LCD12864_display_character(0,6,array_parameter_1);
+ 399   6                  LCD12864_display_character(1,6,array_parameter_2);
+ 400   6                  LCD12864_display_character(2,6,array_parameter_3);
+ 401   6      
+ 402   6                  LCD12864_display_character(2,0," -> ");
+ 403   6                }
+ 404   5                if(count_options==23)
+ 405   5                {
+ 406   6                  LCD12864_init_character();
+ 407   6                  LCD12864_display_character(0,3,"高位: ");
+ 408   6                  LCD12864_display_character(1,3,"低位: ");
+ 409   6                  LCD12864_display_character(2,3,"权限: ");
+ 410   6                  LCD12864_display_character(3,3,"确认");
+ 411   6      
+ 412   6                  LCD12864_display_character(0,6,array_parameter_1);
+ 413   6                  LCD12864_display_character(1,6,array_parameter_2);
+ 414   6                  LCD12864_display_character(2,6,array_parameter_3);
+ 415   6      
+ 416   6                  LCD12864_display_character(3,0," -> ");
+ 417   6                }
+ 418   5      
+ 419   5      
+ 420   5              }
+ 421   4              if(copy_count_options==17)
+ 422   4              {
+ 423   5                sprintf(array_parameter_1,"%02d",(uint)parameter_1);
+ 424   5                sprintf(array_parameter_2,"%02d",(uint)parameter_2);
+ 425   5                if(count_options==24)
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 8   
+
+ 426   5                {
+ 427   6                  LCD12864_init_character();
+ 428   6                  LCD12864_display_character(0,1,"delete  user");
+ 429   6                  LCD12864_display_character(1,3,"高位: ");
+ 430   6                  LCD12864_display_character(2,3,"低位: ");
+ 431   6                  LCD12864_display_character(3,3,"确定");
+ 432   6      
+ 433   6                  LCD12864_display_character(1,6,array_parameter_1);
+ 434   6                  LCD12864_display_character(2,6,array_parameter_2);
+ 435   6      
+ 436   6                  LCD12864_display_character(1,0," -> ");
+ 437   6                }
+ 438   5                if(count_options==25)
+ 439   5                {
+ 440   6                  LCD12864_init_character();
+ 441   6                  LCD12864_display_character(0,1,"delete  user");
+ 442   6                  LCD12864_display_character(1,3,"高位: ");
+ 443   6                  LCD12864_display_character(2,3,"低位: ");
+ 444   6                  LCD12864_display_character(3,3,"确定");
+ 445   6      
+ 446   6                  LCD12864_display_character(1,6,array_parameter_1);
+ 447   6                  LCD12864_display_character(2,6,array_parameter_2);
+ 448   6      
+ 449   6                  LCD12864_display_character(2,0," -> ");
+ 450   6                }
+ 451   5                if(count_options==26)
+ 452   5                {
+ 453   6                  LCD12864_init_character();
+ 454   6                  LCD12864_display_character(0,1,"delete  user");
+ 455   6                  LCD12864_display_character(1,3,"高位: ");
+ 456   6                  LCD12864_display_character(2,3,"低位: ");
+ 457   6                  LCD12864_display_character(3,3,"确定");
+ 458   6      
+ 459   6                  LCD12864_display_character(1,6,array_parameter_1);
+ 460   6                  LCD12864_display_character(2,6,array_parameter_2);
+ 461   6      
+ 462   6                  LCD12864_display_character(3,0," -> ");
+ 463   6                }
+ 464   5              }
+ 465   4      
+ 466   4      
+ 467   4      
+ 468   4              if(copy_count_options==18)
+ 469   4              {
+ 470   5                if(count_options==27)
+ 471   5                {
+ 472   6                  LCD12864_init_character();
+ 473   6                  LCD12864_display_character(0,0," delete all user");
+ 474   6                  LCD12864_display_character(2,2,"确定");
+ 475   6                  LCD12864_display_character(2,6,"取消");
+ 476   6      
+ 477   6                  LCD12864_display_character(2,0," -> ");
+ 478   6                }
+ 479   5                if(count_options==28)
+ 480   5                {
+ 481   6                  LCD12864_init_character();
+ 482   6                  LCD12864_display_character(0,0," delete all user");
+ 483   6                  LCD12864_display_character(2,2,"确定");
+ 484   6                  LCD12864_display_character(2,6,"取消");
+ 485   6      
+ 486   6                  LCD12864_display_character(2,4," -> ");
+ 487   6                }
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 9   
+
+ 488   5      
+ 489   5              }
+ 490   4              if(copy_count_options==19)
+ 491   4              {
+ 492   5                sprintf(array_parameter_1,"%02d",(uint)parameter_1);
+ 493   5                if(count_options==29)
+ 494   5                {
+ 495   6                  LCD12864_init_character();
+ 496   6                  LCD12864_display_character(0,0,"  setting level ");
+ 497   6                  LCD12864_display_character(1,3,"等级: ");
+ 498   6                  LCD12864_display_character(2,3,"确定");
+ 499   6      
+ 500   6                  LCD12864_display_character(1,6,array_parameter_1);
+ 501   6      
+ 502   6                  LCD12864_display_character(1,1," -> ");
+ 503   6                }
+ 504   5                if(count_options==30)
+ 505   5                {
+ 506   6                  LCD12864_init_character();
+ 507   6                  LCD12864_display_character(0,0,"  setting level ");
+ 508   6                  LCD12864_display_character(1,3,"等级: ");
+ 509   6                  LCD12864_display_character(2,3,"确定");
+ 510   6      
+ 511   6                  LCD12864_display_character(1,6,array_parameter_1);
+ 512   6      
+ 513   6                  LCD12864_display_character(2,1," -> ");
+ 514   6                }
+ 515   5              }
+ 516   4      
+ 517   4      
+ 518   4      
+ 519   4      
+ 520   4      
+ 521   4      
+ 522   4      
+ 523   4      
+ 524   4              if(copy_count_options==10)                  //B    设置快门  右手开门  左手关门
+ 525   4              {     
+ 526   5                quick_door=1;
+ 527   5                LCD12864_init_character();
+ 528   5                LCD12864_display_character(0,1,"快门设置成功");
+ 529   5                LCD12864_display_character(2,1,"右指快速开门");
+ 530   5                LCD12864_display_character(3,1,"左指快速关门");
+ 531   5      
+ 532   5                buzzer_quantity=1;
+ 533   5                buzzer_low_time=20;
+ 534   5                buzzer_high_time=0;
+ 535   5      
+ 536   5                delay_10us(50000);
+ 537   5                delay_10us(50000);
+ 538   5                delay_10us(50000);
+ 539   5                delay_10us(50000);
+ 540   5                delay_10us(50000);
+ 541   5                delay_10us(50000);
+ 542   5      //          count_confirm=2;
+ 543   5      //          copy_count_options=9;
+ 544   5      //          count_options=10;
+ 545   5                count_confirm=0;
+ 546   5                copy_count_options=0;
+ 547   5                count_options=0;
+ 548   5                time0_lock=100;
+ 549   5                continue;
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 10  
+
+ 550   5      
+ 551   5              }
+ 552   4              if(copy_count_options==11)                  //C
+ 553   4              {     
+ 554   5                quick_door=2;
+ 555   5                LCD12864_init_character();
+ 556   5                LCD12864_display_character(0,1,"快门设置成功");
+ 557   5                LCD12864_display_character(2,1,"右指快速开门");
+ 558   5                LCD12864_display_character(3,1,"左指快速关门");
+ 559   5      
+ 560   5                buzzer_quantity=1;
+ 561   5                buzzer_low_time=20;
+ 562   5                buzzer_high_time=0;
+ 563   5      
+ 564   5                delay_10us(50000);
+ 565   5                delay_10us(50000);
+ 566   5                delay_10us(50000);
+ 567   5                delay_10us(50000);
+ 568   5                delay_10us(50000);
+ 569   5                delay_10us(50000);
+ 570   5                count_confirm=0;
+ 571   5                copy_count_options=0;
+ 572   5                count_options=0;
+ 573   5                time0_lock=100;
+ 574   5                continue;
+ 575   5              }
+ 576   4              if(copy_count_options==12)                  //BC
+ 577   4              {     
+ 578   5                quick_door=3;
+ 579   5                LCD12864_init_character();
+ 580   5                LCD12864_display_character(0,1,"快门设置成功");
+ 581   5                LCD12864_display_character(2,1,"右指快速开门");
+ 582   5                LCD12864_display_character(3,1,"左指快速关门");
+ 583   5      
+ 584   5                buzzer_quantity=1;
+ 585   5                buzzer_low_time=20;
+ 586   5                buzzer_high_time=0;
+ 587   5      
+ 588   5                delay_10us(50000);
+ 589   5                delay_10us(50000);
+ 590   5                delay_10us(50000);
+ 591   5                delay_10us(50000);
+ 592   5                delay_10us(50000);
+ 593   5                delay_10us(50000);
+ 594   5                count_confirm=0;
+ 595   5                copy_count_options=0;
+ 596   5                count_options=0;
+ 597   5                time0_lock=100;
+ 598   5                continue;
+ 599   5              }
+ 600   4              if(copy_count_options==13)                  //ABCD
+ 601   4              {     
+ 602   5                quick_door=4;
+ 603   5                LCD12864_init_character();
+ 604   5                LCD12864_display_character(0,1,"快门设置成功");
+ 605   5                LCD12864_display_character(2,1,"右指快速开门");
+ 606   5                LCD12864_display_character(3,1,"左指快速关门");
+ 607   5      
+ 608   5                buzzer_quantity=1;
+ 609   5                buzzer_low_time=20;
+ 610   5                buzzer_high_time=0;
+ 611   5      
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 11  
+
+ 612   5                delay_10us(50000);
+ 613   5                delay_10us(50000);
+ 614   5                delay_10us(50000);
+ 615   5                delay_10us(50000);
+ 616   5                delay_10us(50000);
+ 617   5                delay_10us(50000);
+ 618   5                count_confirm=0;
+ 619   5                copy_count_options=0;
+ 620   5                count_options=0;
+ 621   5                time0_lock=100;
+ 622   5                continue;
+ 623   5              }
+ 624   4              if(copy_count_options==14)                 //无
+ 625   4              {
+ 626   5                quick_door=0;     
+ 627   5                LCD12864_init_character();
+ 628   5                LCD12864_display_character(1,1,"快门设置取消");
+ 629   5      
+ 630   5                buzzer_quantity=1;
+ 631   5                buzzer_low_time=20;
+ 632   5                buzzer_high_time=0;
+ 633   5      
+ 634   5                delay_10us(50000);
+ 635   5                delay_10us(50000);
+ 636   5                delay_10us(50000);
+ 637   5                delay_10us(50000);
+ 638   5                delay_10us(50000);
+ 639   5                delay_10us(50000);
+ 640   5                count_confirm=0;
+ 641   5                copy_count_options=0;
+ 642   5                count_options=0;
+ 643   5                time0_lock=100;
+ 644   5                continue;
+ 645   5              }
+ 646   4              if(copy_count_options==15)                  //返回
+ 647   4              {
+ 648   5                count_confirm=1;
+ 649   5                copy_count_options=0;
+ 650   5                count_options=4;
+ 651   5              }
+ 652   4            }
+ 653   3      
+ 654   3      
+ 655   3      
+ 656   3      
+ 657   3      
+ 658   3      
+ 659   3      
+ 660   3      
+ 661   3      
+ 662   3      
+ 663   3            if(count_confirm==4)
+ 664   3            {
+ 665   4      
+ 666   4              if(copy_count_options==20)
+ 667   4              {
+ 668   5                parameter_1=parameter;
+ 669   5      
+ 670   5                sprintf(array_parameter_1,"%02d",(uint)parameter_1);     //加#以输出0x
+ 671   5                LCD12864_display_character(0,7,"  ");            //清除第三位数
+ 672   5                LCD12864_display_character(0,6,array_parameter_1);
+ 673   5          
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 12  
+
+ 674   5              }
+ 675   4              if(copy_count_options==21)
+ 676   4              {
+ 677   5                parameter_2=parameter;  
+ 678   5              
+ 679   5                sprintf(array_parameter_2,"%02d",(uint)parameter_2);
+ 680   5                LCD12864_display_character(1,7,"  ");
+ 681   5                LCD12864_display_character(1,6,array_parameter_2);
+ 682   5              }
+ 683   4              if(copy_count_options==22)
+ 684   4              {
+ 685   5                parameter_3=parameter;
+ 686   5                sprintf(array_parameter_3,"%02d",(uint)parameter_3);
+ 687   5                LCD12864_display_character(2,6,array_parameter_3);
+ 688   5              }
+ 689   4              if(copy_count_options==23)
+ 690   4              {
+ 691   5      
+ 692   5                receive_data[0]=0x00;
+ 693   5                receive_data[1]=0x00;      
+ 694   5                receive_data[2]=0x00;
+ 695   5                receive_data[3]=0x00;
+ 696   5                receive_data[4]=0x00;
+ 697   5                receive_data[5]=0x00;
+ 698   5                receive_data[6]=0x00;
+ 699   5                receive_data[7]=0x00;                        //数据协议重置
+ 700   5                       
+ 701   5      
+ 702   5                LCD12864_init_character();
+ 703   5                LCD12864_display_character(0,1,"请按压第壹次");          //参数一最大2FF  参数二最大EF  用户号 1~FFEF
+ 704   5                ZW_SZW201_cmd (parameter_1,parameter_2,parameter_3,"add_1");
+ 705   5                delay_10us(50000);
+ 706   5                delay_10us(50000);
+ 707   5                delay_10us(50000);
+ 708   5                delay_10us(50000);
+ 709   5                delay_10us(50000);
+ 710   5                delay_10us(50000);
+ 711   5                delay_10us(50000);
+ 712   5                delay_10us(50000);
+ 713   5                time0_lock=0;
+ 714   5                delay_10us(50000);
+ 715   5                delay_10us(50000);
+ 716   5                if(receive_data[1]==0x01&&receive_data[4]==0x07&&receive_data[6]==0x06)
+ 717   5                {
+ 718   6                  LCD12864_display_character(0,1,"此指纹已存在");
+ 719   6                  delay_10us(50000);                     //F5 03 00 00 01 00 02 F5    录入失败
+ 720   6                  delay_10us(50000);
+ 721   6                  delay_10us(50000);                     //F5 01 00 00 07 00 06 F5    指纹已存在
+ 722   6                  delay_10us(50000);
+ 723   6                  delay_10us(50000);
+ 724   6                  delay_10us(50000);
+ 725   6      
+ 726   6                  parameter_1=0;
+ 727   6                  parameter_2=0;
+ 728   6                  parameter_3=0;
+ 729   6      
+ 730   6                  receive_data[4]=0x03;
+ 731   6      
+ 732   6                  count_confirm=2;
+ 733   6                  copy_count_options=8;
+ 734   6                  count_options=16;   
+ 735   6                  time0_lock=0;
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 13  
+
+ 736   6                  continue;
+ 737   6                }
+ 738   5                LCD12864_init_character();  
+ 739   5                LCD12864_display_character(1,1,"请按压第贰次");
+ 740   5                ZW_SZW201_cmd (parameter_1,parameter_2,parameter_3,"add_2");
+ 741   5                delay_10us(50000);
+ 742   5                delay_10us(50000);
+ 743   5                delay_10us(50000);
+ 744   5                delay_10us(50000);
+ 745   5                delay_10us(50000);
+ 746   5                delay_10us(50000);
+ 747   5                delay_10us(50000);
+ 748   5                delay_10us(50000);
+ 749   5                time0_lock=0;
+ 750   5                delay_10us(50000);
+ 751   5                delay_10us(50000);
+ 752   5                LCD12864_init_character();
+ 753   5                LCD12864_display_character(2,1,"请按压第叁次");
+ 754   5                ZW_SZW201_cmd (parameter_1,parameter_2,parameter_3,"add_3");
+ 755   5                delay_10us(50000);
+ 756   5                delay_10us(50000);
+ 757   5                delay_10us(50000);
+ 758   5                delay_10us(50000);
+ 759   5                delay_10us(50000);
+ 760   5                delay_10us(50000);
+ 761   5                delay_10us(50000);
+ 762   5                delay_10us(50000);
+ 763   5                time0_lock=0;
+ 764   5                delay_10us(50000);
+ 765   5                delay_10us(50000);
+ 766   5                if(receive_data[1]==0x03&&receive_data[4]==0x01&&receive_data[6]==0x02)
+ 767   5                {
+ 768   6                  LCD12864_display_character(2,1,"指纹录入失败");
+ 769   6                  delay_10us(50000);                     
+ 770   6                  delay_10us(50000);
+ 771   6                  delay_10us(50000);                    
+ 772   6                  delay_10us(50000);
+ 773   6                  delay_10us(50000);
+ 774   6                  delay_10us(50000);
+ 775   6      
+ 776   6                  parameter_1=0;
+ 777   6                  parameter_2=0;
+ 778   6                  parameter_3=0;
+ 779   6      
+ 780   6                  receive_data[4]=0x03;
+ 781   6      
+ 782   6                  count_confirm=2;
+ 783   6                  copy_count_options=8;
+ 784   6                  count_options=16;   
+ 785   6                  time0_lock=0;
+ 786   6                  continue;
+ 787   6                } 
+ 788   5                if(receive_data[1]==0x03&&receive_data[4]==0x00&&receive_data[6]==0x03)
+ 789   5                {
+ 790   6                  LCD12864_display_character(2,1,"指纹录入成功");
+ 791   6                  delay_10us(50000);                     
+ 792   6                  delay_10us(50000);
+ 793   6                  delay_10us(50000);                    
+ 794   6                  delay_10us(50000);
+ 795   6                  delay_10us(50000);
+ 796   6                  delay_10us(50000);
+ 797   6      
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 14  
+
+ 798   6                  parameter_1=0;
+ 799   6                  parameter_2=0;
+ 800   6                  parameter_3=0;
+ 801   6      
+ 802   6                  receive_data[4]=0x03;
+ 803   6      
+ 804   6                  count_confirm=2;
+ 805   6                  copy_count_options=8;
+ 806   6                  count_options=16;   
+ 807   6                  time0_lock=0;
+ 808   6                  continue;
+ 809   6                }
+ 810   5                LCD12864_display_character(2,1,"模块无响应!!");
+ 811   5                delay_10us(50000);
+ 812   5                delay_10us(50000);
+ 813   5                delay_10us(50000);
+ 814   5                delay_10us(50000);
+ 815   5                delay_10us(50000);
+ 816   5                delay_10us(50000);
+ 817   5      
+ 818   5      
+ 819   5                parameter_1=0;
+ 820   5                parameter_2=0;
+ 821   5                parameter_3=0;
+ 822   5      
+ 823   5                receive_data[4]=0x03;
+ 824   5                
+ 825   5                count_confirm=2;
+ 826   5                copy_count_options=8;
+ 827   5                count_options=16;
+ 828   5                time0_lock=0;
+ 829   5                continue;   
+ 830   5                  
+ 831   5              }
+ 832   4              if(copy_count_options==24)
+ 833   4              {
+ 834   5                parameter_1=parameter;
+ 835   5      
+ 836   5                sprintf(array_parameter_1,"%02d",(uint)parameter_1);
+ 837   5                LCD12864_display_character(1,7,"  ");
+ 838   5                LCD12864_display_character(1,6,array_parameter_1);
+ 839   5              }
+ 840   4              if(copy_count_options==25)
+ 841   4              {
+ 842   5                parameter_2=parameter;
+ 843   5      
+ 844   5                sprintf(array_parameter_2,"%02d",(uint)parameter_2);
+ 845   5                LCD12864_display_character(2,7,"  ");
+ 846   5                LCD12864_display_character(2,6,array_parameter_2);
+ 847   5              }
+ 848   4              if(copy_count_options==26)
+ 849   4              {
+ 850   5                receive_data[0]=0x00;
+ 851   5                receive_data[1]=0x00;      
+ 852   5                receive_data[2]=0x00;
+ 853   5                receive_data[3]=0x00;
+ 854   5                receive_data[4]=0x00;
+ 855   5                receive_data[5]=0x00;
+ 856   5                receive_data[6]=0x00;
+ 857   5                receive_data[7]=0x00;                        //数据协议重置
+ 858   5      
+ 859   5                LCD12864_init_character();
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 15  
+
+ 860   5                LCD12864_display_character(1,1,"删去特定用户");          
+ 861   5                ZW_SZW201_cmd (parameter_1,parameter_2,0,"delete");
+ 862   5                delay_10us(50000);                     
+ 863   5                delay_10us(50000);
+ 864   5                delay_10us(50000);
+ 865   5                delay_10us(50000);
+ 866   5                LCD12864_init_character();
+ 867   5                LCD12864_display_character(1,2,"请稍后……");        
+ 868   5                delay_10us(50000);
+ 869   5                delay_10us(50000);                     
+ 870   5                delay_10us(50000);
+ 871   5                delay_10us(50000);
+ 872   5      
+ 873   5                time0_lock=0;
+ 874   5      
+ 875   5                if(receive_data[1]==0x04&&receive_data[4]==0x00&&receive_data[6]==0x04)
+ 876   5                {
+ 877   6                  LCD12864_init_character();
+ 878   6                  LCD12864_display_character(1,2,"操作成功");
+ 879   6                  delay_10us(50000);                     
+ 880   6                  delay_10us(50000);
+ 881   6                  delay_10us(50000);                    
+ 882   6                  delay_10us(50000);
+ 883   6                  delay_10us(50000);
+ 884   6                  delay_10us(50000);
+ 885   6      
+ 886   6                  parameter_1=0;
+ 887   6                  parameter_2=0;
+ 888   6                  parameter_3=0;
+ 889   6      
+ 890   6                  receive_data[4]=0x03;
+ 891   6      
+ 892   6                  count_confirm=2;
+ 893   6                  copy_count_options=8;
+ 894   6                  count_options=16;   
+ 895   6                  time0_lock=0;
+ 896   6                  continue;
+ 897   6                }
+ 898   5                if(receive_data[1]==0x04&&receive_data[4]==0x05&&receive_data[6]==0x01)
+ 899   5                {
+ 900   6                  LCD12864_init_character();
+ 901   6                  LCD12864_display_character(1,2,"操作失败");
+ 902   6                  delay_10us(50000);                     
+ 903   6                  delay_10us(50000);
+ 904   6                  delay_10us(50000);                    
+ 905   6                  delay_10us(50000);
+ 906   6                  delay_10us(50000);
+ 907   6                  delay_10us(50000);
+ 908   6      
+ 909   6                  parameter_1=0;
+ 910   6                  parameter_2=0;
+ 911   6                  parameter_3=0;
+ 912   6      
+ 913   6                  receive_data[4]=0x03;
+ 914   6      
+ 915   6                  count_confirm=2;
+ 916   6                  copy_count_options=8;
+ 917   6                  count_options=16;   
+ 918   6                  time0_lock=0;
+ 919   6                  continue;
+ 920   6                }
+ 921   5      
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 16  
+
+ 922   5                LCD12864_init_character();
+ 923   5                LCD12864_display_character(1,1,"模块无响应!!");
+ 924   5                delay_10us(50000);                     
+ 925   5                delay_10us(50000);
+ 926   5                delay_10us(50000);                    
+ 927   5                delay_10us(50000);
+ 928   5                delay_10us(50000);
+ 929   5                delay_10us(50000);
+ 930   5      
+ 931   5                parameter_1=0;
+ 932   5                parameter_2=0;
+ 933   5                parameter_3=0;
+ 934   5      
+ 935   5                receive_data[4]=0x03;
+ 936   5      
+ 937   5                count_confirm=2;
+ 938   5                copy_count_options=8;
+ 939   5                count_options=16;   
+ 940   5                time0_lock=0;
+ 941   5                continue;
+ 942   5                  
+ 943   5              }
+ 944   4              if(copy_count_options==27)
+ 945   4              {
+ 946   5                receive_data[0]=0x00;
+ 947   5                receive_data[1]=0x00;      
+ 948   5                receive_data[2]=0x00;
+ 949   5                receive_data[3]=0x00;
+ 950   5                receive_data[4]=0x00;
+ 951   5                receive_data[5]=0x00;
+ 952   5                receive_data[6]=0x00;
+ 953   5                receive_data[7]=0x00;                        //数据协议重置
+ 954   5      
+ 955   5                LCD12864_init_character();
+ 956   5                LCD12864_display_character(1,1,"删去所有用户");          
+ 957   5                ZW_SZW201_cmd (0,0,0,"delete_all");
+ 958   5                delay_10us(50000);                     
+ 959   5                delay_10us(50000);
+ 960   5                delay_10us(50000);
+ 961   5                delay_10us(50000);
+ 962   5                LCD12864_init_character();
+ 963   5                LCD12864_display_character(1,2,"请稍后……");        
+ 964   5                delay_10us(50000);
+ 965   5                delay_10us(50000);                     
+ 966   5                delay_10us(50000);
+ 967   5                delay_10us(50000);
+ 968   5      
+ 969   5                time0_lock=0;
+ 970   5              
+ 971   5                if(receive_data[1]==0x05&&receive_data[4]==0x00&&receive_data[6]==0x05)
+ 972   5                {
+ 973   6                  LCD12864_init_character();
+ 974   6                  LCD12864_display_character(1,2,"操作成功");
+ 975   6                  delay_10us(50000);                     
+ 976   6                  delay_10us(50000);
+ 977   6                  delay_10us(50000);                    
+ 978   6                  delay_10us(50000);
+ 979   6                  delay_10us(50000);
+ 980   6                  delay_10us(50000);
+ 981   6      
+ 982   6                  parameter_1=0;
+ 983   6                  parameter_2=0;
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 17  
+
+ 984   6                  parameter_3=0;
+ 985   6      
+ 986   6                  receive_data[4]=0x03;
+ 987   6      
+ 988   6                  count_confirm=2;
+ 989   6                  copy_count_options=8;
+ 990   6                  count_options=16;   
+ 991   6                  time0_lock=0;
+ 992   6                  continue;
+ 993   6                }
+ 994   5                LCD12864_init_character();
+ 995   5                LCD12864_display_character(1,1,"模块无响应!!");
+ 996   5                delay_10us(50000);                     
+ 997   5                delay_10us(50000);
+ 998   5                delay_10us(50000);                    
+ 999   5                delay_10us(50000);
+1000   5                delay_10us(50000);
+1001   5                delay_10us(50000);
+1002   5      
+1003   5                parameter_1=0;
+1004   5                parameter_2=0;
+1005   5                parameter_3=0;
+1006   5      
+1007   5                receive_data[4]=0x03;
+1008   5      
+1009   5                count_confirm=2;
+1010   5                copy_count_options=8;
+1011   5                count_options=16;   
+1012   5                time0_lock=0;
+1013   5                continue;
+1014   5      
+1015   5              }
+1016   4              if(copy_count_options==28)
+1017   4              {
+1018   5                count_confirm=2;
+1019   5                copy_count_options=8;
+1020   5                count_options=16;   
+1021   5              }
+1022   4              if(copy_count_options==29)
+1023   4              {
+1024   5                parameter_1=parameter;
+1025   5                sprintf(array_parameter_1,"%02d",(uint)parameter_1);
+1026   5                LCD12864_display_character(1,6,array_parameter_1);
+1027   5              }
+1028   4              if(copy_count_options==30)
+1029   4              {
+1030   5                receive_data[0]=0x00;
+1031   5                receive_data[1]=0x00;      
+1032   5                receive_data[2]=0x00;
+1033   5                receive_data[3]=0x00;
+1034   5                receive_data[4]=0x00;
+1035   5                receive_data[5]=0x00;
+1036   5                receive_data[6]=0x00;
+1037   5                receive_data[7]=0x00;                        //数据协议重置
+1038   5      
+1039   5                LCD12864_init_character();
+1040   5                LCD12864_display_character(1,1,"设置比对等级");          
+1041   5                ZW_SZW201_cmd (parameter_1,0,0,"security_level");
+1042   5                delay_10us(50000);                     
+1043   5                delay_10us(50000);
+1044   5                delay_10us(50000);
+1045   5                delay_10us(50000);
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 18  
+
+1046   5                LCD12864_init_character();
+1047   5                LCD12864_display_character(1,2,"请稍后……"); 
+1048   5                ZW_SZW201_cmd (parameter_1,0,0,"security_level");      
+1049   5                delay_10us(50000);
+1050   5                delay_10us(50000);                     
+1051   5                delay_10us(50000);
+1052   5                delay_10us(50000);
+1053   5      
+1054   5                time0_lock=0;
+1055   5      
+1056   5                if(receive_data[1]==0x28&&receive_data[3]==parameter_1&&receive_data[6]==(0x28^receive_data[3]))
+1057   5                {
+1058   6                  LCD12864_init_character();
+1059   6                  LCD12864_display_character(1,2,"操作成功");
+1060   6                  delay_10us(50000);                     
+1061   6                  delay_10us(50000);
+1062   6                  delay_10us(50000);                    
+1063   6                  delay_10us(50000);
+1064   6                  delay_10us(50000);
+1065   6                  delay_10us(50000);
+1066   6      
+1067   6                  parameter_1=0;
+1068   6                  parameter_2=0;
+1069   6                  parameter_3=0;
+1070   6      
+1071   6                  receive_data[4]=0x03;
+1072   6      
+1073   6                  count_confirm=2;
+1074   6                  copy_count_options=8;
+1075   6                  count_options=16;   
+1076   6                  time0_lock=0;
+1077   6                  continue;
+1078   6                }
+1079   5      
+1080   5                LCD12864_init_character();
+1081   5                LCD12864_display_character(1,1,"模块无响应!!");
+1082   5                delay_10us(50000);                     
+1083   5                delay_10us(50000);
+1084   5                delay_10us(50000);                    
+1085   5                delay_10us(50000);
+1086   5                delay_10us(50000);
+1087   5                delay_10us(50000);
+1088   5      
+1089   5                parameter_1=0;
+1090   5                parameter_2=0;
+1091   5                parameter_3=0;
+1092   5      
+1093   5                receive_data[4]=0x03;
+1094   5      
+1095   5                count_confirm=2;
+1096   5                copy_count_options=8;
+1097   5                count_options=16;   
+1098   5                time0_lock=0;
+1099   5                continue;
+1100   5                  
+1101   5              }
+1102   4              if(parameter_1==0xff&&parameter_2>=0xf0)
+1103   4              {
+1104   5                parameter_1=0;
+1105   5                parameter_2=0;
+1106   5                parameter_3=0;
+1107   5                continue;
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 19  
+
+1108   5              }
+1109   4      
+1110   4                
+1111   4            }
+1112   3      
+1113   3      
+1114   3      
+1115   3      
+1116   3      
+1117   3      
+1118   3      
+1119   3      
+1120   3      
+1121   3      
+1122   3      //      if(count_confirm==5)
+1123   3      //      {
+1124   3      //          
+1125   3      //      }
+1126   3      //
+1127   3      //
+1128   3      //
+1129   3      //
+1130   3      //
+1131   3      //
+1132   3      //
+1133   3      //
+1134   3      //
+1135   3      //      if(count_confirm==6)
+1136   3      //      {
+1137   3      //          
+1138   3      //      }
+1139   3      
+1140   3      
+1141   3      
+1142   3      
+1143   3      
+1144   3      
+1145   3      
+1146   3      
+1147   3            if(flag_quick_door==1)
+1148   3            {
+1149   4              if(quick_door==0&&(receive_data[4]==0x01||receive_data[4]==0x02||receive_data[4]==0x03))
+1150   4              {
+1151   5                flag_quick_door=0;
+1152   5                continue;         
+1153   5              }
+1154   4      
+1155   4              if(quick_door==1&&(receive_data[4]==0x01||receive_data[4]==0x03))
+1156   4              {
+1157   5                control_door('B',"stop");
+1158   5                delay_10us(2000);
+1159   5                control_door('B',"open");
+1160   5              }
+1161   4              if(quick_door==1&&receive_data[4]==0x02)
+1162   4              {
+1163   5                control_door('B',"stop");
+1164   5                delay_10us(2000);
+1165   5                control_door('B',"down");
+1166   5              }
+1167   4      
+1168   4              if(quick_door==2&&(receive_data[4]==0x01||receive_data[4]==0x03))
+1169   4              {
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 20  
+
+1170   5                control_door('C',"stop");
+1171   5                delay_10us(2000);
+1172   5                control_door('C',"open");
+1173   5              }
+1174   4              if(quick_door==2&&receive_data[4]==0x02)
+1175   4              {
+1176   5                control_door('C',"stop");
+1177   5                delay_10us(2000);
+1178   5                control_door('C',"down");
+1179   5              }
+1180   4      
+1181   4              if(quick_door==3&&(receive_data[4]==0x01||receive_data[4]==0x03))
+1182   4              {
+1183   5                control_door('B',"stop");
+1184   5                control_door('C',"stop");
+1185   5                delay_10us(2000);
+1186   5                control_door('C',"open");
+1187   5                control_door('B',"open");
+1188   5              }
+1189   4              if(quick_door==3&&receive_data[4]==0x02)
+1190   4              {
+1191   5                control_door('B',"stop");
+1192   5                control_door('C',"stop");
+1193   5                delay_10us(2000);
+1194   5                control_door('C',"down");
+1195   5                control_door('B',"down");
+1196   5              }
+1197   4      
+1198   4              if(quick_door==4&&(receive_data[4]==0x01||receive_data[4]==0x03))
+1199   4              {
+1200   5                control_door('A',"stop");
+1201   5                control_door('B',"stop");
+1202   5                control_door('C',"stop");
+1203   5                control_door('D',"stop");
+1204   5              
+1205   5                delay_10us(2000);
+1206   5      
+1207   5                control_door('A',"open");
+1208   5                control_door('B',"open");
+1209   5                control_door('C',"open");
+1210   5                control_door('D',"open");
+1211   5      
+1212   5              }   
+1213   4              if(quick_door==4&&receive_data[4]==0x02)
+1214   4              {
+1215   5                control_door('A',"stop");
+1216   5                control_door('B',"stop");
+1217   5                control_door('C',"stop");
+1218   5                control_door('D',"stop");
+1219   5      
+1220   5                delay_10us(2000);
+1221   5      
+1222   5                control_door('A',"down");
+1223   5                control_door('B',"down");
+1224   5                control_door('C',"down");
+1225   5                control_door('D',"down");               
+1226   5              }
+1227   4              flag_quick_door=0;
+1228   4              flag_display_screen=1;
+1229   4            }
+1230   3      
+1231   3            delay_10us(10);     //确保进入if(open_lock==0);
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 21  
+
+1232   3      
+1233   3            if(open_lock==0)    //防止执行函数时  定时器中断  无法刷新 display_init_screen0(); 必须置后！！！
+1234   3              display_init_screen_00();
+1235   3      
+1236   3      
+1237   3          } 
+1238   2        }
+1239   1      
+1240   1      }
+1241          
+1242          
+1243          
+1244          
+1245          
+1246          
+1247          
+1248          
+1249          //  LCD12864_restart();
+1250          //
+1251          //  init_LCD12864_character();
+1252          //  display_character(0,0,"");
+1253          //  delay_10us(60000);
+1254          //  delay_10us(60000);
+1255          //  delay_10us(60000);
+1256          //  delay_10us(60000);
+1257          //
+1258          //  init_LCD12864_character();
+1259          //  write_cmd(0x01);
+1260          //  init_LCD12864_picture();
+1261          //  display_picture(picture0);
+1262          //
+1263          //  delay_10us(60000);
+1264          //  delay_10us(60000);
+1265          //  delay_10us(60000);
+1266          //  delay_10us(60000);
+1267          //
+1268          //  init_LCD12864_character();
+1269          //  display_character(0,0,"高能");
+1270          //  display_character(3,0,"壁");
+1271          //  init_LCD12864_picture();
+1272          //  display_picture(picture0);
+1273          //
+1274          //  delay_10us(60000);
+1275          //  delay_10us(60000);
+1276          //  delay_10us(60000);
+1277          //  delay_10us(60000);
+1278          //
+1279          //  init_LCD12864_character();
+1280          //  write_cmd(0x01);
+1281          //
+1282          //  init_LCD12864_picture();
+1283          //  Clear_picture();
+1284          
+1285          
+1286          
+1287          
+1288          
+1289          
+1290          
+1291          
+1292          
+1293          
+C51 COMPILER V9.60.0.0   MAIN                                                              05/16/2020 14:51:04 PAGE 22  
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4672    ----
+   CONSTANT SIZE    =    478    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     49    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      6    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
